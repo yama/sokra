@@ -19,6 +19,7 @@ Inspired by the Socratic method (*maieutics*): the truth already exists within t
 ## Concept
 
 Traditional feedback forms tend to:
+
 - Reflect the question-asker's assumptions
 - Invite "correct-sounding" answers
 - Bore respondents
@@ -42,6 +43,7 @@ Sokra instead acts as **a good listener** — reducing friction, allowing small 
 Sokra maintains an internal checklist of topics to cover — invisible to the respondent. Like improv comedy where performers must weave in 5 given keywords naturally, Sokra works these into conversation without ever revealing the structure.
 
 Default checkpoints:
+
 - Participation background
 - Overall impression / temperature
 - Memorable moment
@@ -53,12 +55,14 @@ Default checkpoints:
 ## AI Behavior Principles
 
 **Sokra does NOT:**
+
 - Summarize or analyze in real-time
 - Push for positive framing
 - Make the respondent feel interviewed
 - Use phrases like "So what you're saying is..."
 
 **Sokra DOES:**
+
 - Use short acknowledgements ("uh-huh", "I see")
 - Allow — even encourage — small talk and tangents
 - Vary response length and tempo (like a human)
@@ -70,8 +74,9 @@ Default checkpoints:
 ## Tech Stack
 
 - **Frontend**: Vanilla HTML/CSS/JS (single file, no build step)
-- **AI**: Anthropic Claude API
-- **Log format**: JSON
+- **Backend**: Node.js (`server.js`) for API proxy + local file logging
+- **AI**: Gemini API
+- **Log format**: JSONL (server-side append) + JSON export (client)
 - **Analysis**: Designed for NotebookLM or similar
 
 ---
@@ -81,11 +86,12 @@ Default checkpoints:
 ```bash
 git clone https://github.com/yourname/sokra.git
 cd sokra
+npm start
 ```
 
-Open `interview.html` in your browser. Enter your Anthropic API key when prompted.
+Open `http://localhost:3000` in your browser. Enter your Gemini API key when prompted.
 
-> Your API key is used only within your browser session and is never stored or transmitted elsewhere.
+Session logs are saved on the server under `data/sessions/*.jsonl`.
 
 ---
 

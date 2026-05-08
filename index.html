@@ -507,6 +507,7 @@
     <script>
         let API_KEY = "";
         let MODEL_NAME = "gemini-2.5-flash";
+        let SESSION_ID = null;
         const USD_TO_JPY = 155;
         const MODEL_PRICING_USD_PER_1M = {
             "gemini-2.5-flash": { input: 0.30, output: 2.50 },
@@ -656,6 +657,7 @@
                 : "直近: -";
             el.innerHTML = [
                 `モデル: ${MODEL_NAME}（$1=${USD_TO_JPY}円で概算）`,
+                `セッションID: ${SESSION_ID || "-"}`,
                 `リクエスト: ${formatInt(usageSummary.requests)}回`,
                 `累計: in ${formatInt(usageSummary.prompt)} / out ${formatInt(usageSummary.output)} / total ${formatInt(usageSummary.total)}`,
                 `累計コスト: ${formatYen(usageSummary.costJpy)}（約$${usageSummary.costUsd.toFixed(4)}）`,
@@ -663,26 +665,51 @@
             ].join("<br>");
         }
 
-        // --- API ---
-        function toGeminiContents(history) {
-            return history.map(m => ({
-                role: m.role === "assistant" ? "model" : "user",
-                parts: [{ text: m.content }]
-            }));
+        async function startServerSession() {
+            const res = await fetch("/api/session/start", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ model: MODEL_NAME, client: "web" })
+            });
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(`セッション開始に失敗しました: ${text}`);
+            }
+            const data = await res.json();
+            SESSION_ID = data.sessionId;
         }
 
-        async function callGemini(userText) {
-            conversationHistory.push({ role: "user", content: userText });
+        async function persistSessionEvent(event) {
+            if (!SESSION_ID) return;
+            try {
+                await fetch(`/api/session/${SESSION_ID}/event`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ event })
+                });
+            } catch {
+                // Keep UI flowing even if log persistence fails.
+            }
+        }
 
-            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${encodeURIComponent(API_KEY)}`, {
+        function pushSessionEvent(event) {
+            sessionLog.push(event);
+            persistSessionEvent(event);
+        }
+
+        // --- API ---
+        async function callGemini(userText) {
+            const res = await fetch("/api/gemini", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
-                    systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-                    generationConfig: { maxOutputTokens: 1000 },
-                    contents: toGeminiContents(conversationHistory)
+                    apiKey: API_KEY,
+                    model: MODEL_NAME,
+                    systemPrompt: SYSTEM_PROMPT,
+                    conversationHistory,
+                    userText
                 })
             });
 
@@ -692,11 +719,10 @@
             }
 
             const data = await res.json();
-            const raw = data.candidates?.[0]?.content?.parts?.map(p => p.text).join("") || '{"text":"うん。","checkpoints_filled":[]}';
-            const usage = data.usageMetadata || {};
-            const promptTokens = usage.promptTokenCount || 0;
-            const outputTokens = usage.candidatesTokenCount || usage.outputTokenCount || 0;
-            const totalTokens = usage.totalTokenCount || (promptTokens + outputTokens);
+            const raw = data.raw || '{"text":"うん。","checkpoints_filled":[]}';
+            const promptTokens = data.usage?.promptTokenCount || 0;
+            const outputTokens = data.usage?.outputTokenCount || 0;
+            const totalTokens = data.usage?.totalTokenCount || (promptTokens + outputTokens);
             const estimated = estimateCost(promptTokens, outputTokens, MODEL_NAME);
 
             usageSummary.requests += 1;
@@ -709,6 +735,7 @@
             let parsed;
             try { parsed = JSON.parse(raw.replace(/```json|```/g, "").trim()); }
             catch { parsed = { text: raw, checkpoints_filled: [] }; }
+            conversationHistory.push({ role: "user", content: userText });
             conversationHistory.push({ role: "assistant", content: raw });
             return {
                 ...parsed,
@@ -727,14 +754,14 @@
         async function sendUserMessage(text) {
             if (!text.trim()) return;
             addMessage("user", text);
-            sessionLog.push({ role: "user", text });
+            pushSessionEvent({ role: "user", text });
             showTyping();
             document.getElementById("sendBtn").disabled = true;
             try {
                 const result = await callGemini(text);
                 removeTyping();
                 addMessage("ai", result.text);
-                sessionLog.push({ role: "ai", text: result.text, usage: result.usage });
+                pushSessionEvent({ role: "ai", text: result.text, usage: result.usage });
                 updateUsageStats(result.usage);
                 if (result.checkpoints_filled?.length) markCheckpoints(result.checkpoints_filled);
                 if (allDone()) setTimeout(endSession, 800);
@@ -760,7 +787,7 @@
                 const parsed = await callGemini(ctx);
                 removeTyping();
                 addMessage("ai", parsed.text);
-                sessionLog.push({ role: "ai", text: parsed.text, usage: parsed.usage });
+                pushSessionEvent({ role: "ai", text: parsed.text, usage: parsed.usage });
                 updateUsageStats(parsed.usage);
             } catch (e) {
                 removeTyping();
@@ -778,7 +805,7 @@
                 async (c) => {
                     sessionContext.format = c.value;
                     addMessage("user", c.label);
-                    sessionLog.push({ role: "user", text: c.label, type: "button" });
+                    pushSessionEvent({ role: "user", text: c.label, type: "button" });
                     await sleep(700);
                     addMessage("ai", "そうなんですね。仕事終わりでした？");
                     await sleep(400);
@@ -787,7 +814,7 @@
                         async (c2) => {
                             sessionContext.timing = c2.value;
                             addMessage("user", c2.label);
-                            sessionLog.push({ role: "user", text: c2.label, type: "button" });
+                            pushSessionEvent({ role: "user", text: c2.label, type: "button" });
                             await sleep(700);
                             addMessage("ai", "今日のセミナー、全体的にどうでした？");
                             await sleep(400);
@@ -801,7 +828,7 @@
                                 async (c3) => {
                                     sessionContext.mood = c3.value;
                                     addMessage("user", c3.label);
-                                    sessionLog.push({ role: "user", text: c3.label, type: "button" });
+                                    pushSessionEvent({ role: "user", text: c3.label, type: "button" });
                                     markCheckpoints(["temperature"]);
                                     await sleep(800);
                                     startChatPhase();
@@ -814,19 +841,32 @@
         }
 
         // --- イベント ---
-        document.getElementById("startBtn").addEventListener("click", () => {
+        document.getElementById("startBtn").addEventListener("click", async () => {
             const key = document.getElementById("apiKeyInput").value.trim();
             if (!key) {
                 document.getElementById("apiError").style.display = "block";
                 return;
             }
-            API_KEY = key;
-            MODEL_NAME = document.getElementById("modelSelect").value;
-            document.getElementById("apiScreen").style.display = "none";
-            document.getElementById("mainScreen").style.display = "flex";
-            updateChecklist();
-            updateUsageStats();
-            runButtonPhase();
+            try {
+                API_KEY = key;
+                MODEL_NAME = document.getElementById("modelSelect").value;
+                await startServerSession();
+                document.getElementById("apiScreen").style.display = "none";
+                document.getElementById("mainScreen").style.display = "flex";
+                updateChecklist();
+                updateUsageStats();
+                pushSessionEvent({
+                    role: "system",
+                    type: "session_started",
+                    model: MODEL_NAME,
+                    pricing: MODEL_PRICING_USD_PER_1M[MODEL_NAME],
+                    usd_to_jpy: USD_TO_JPY
+                });
+                runButtonPhase();
+            } catch (e) {
+                document.getElementById("apiError").textContent = e.message;
+                document.getElementById("apiError").style.display = "block";
+            }
         });
 
         document.getElementById("apiKeyInput").addEventListener("keydown", (e) => {
@@ -850,7 +890,7 @@
 
         document.getElementById("logBtn").addEventListener("click", () => {
             const log = {
-                session_id: "proto_" + Date.now(),
+                session_id: SESSION_ID || ("proto_" + Date.now()),
                 model: MODEL_NAME,
                 seminar_context: sessionContext,
                 usage_summary: usageSummary,
