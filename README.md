@@ -93,6 +93,23 @@ Open `http://localhost:3000` in your browser. Enter your Gemini API key when pro
 
 Session logs are saved on the server under `data/sessions/*.jsonl`.
 
+## AI Commit Workflow (Copilot / Claude / Codex)
+
+このリポジトリでは、コミットメッセージ生成ルールを共通化しています。
+
+- 規約本体: `docs/commit-convention.md`
+- AI入力テンプレート: `docs/commit-prompt.md`
+- クライアント向け設定:
+  - `AGENTS.md`
+  - `CLAUDE.md`
+  - `.github/copilot-instructions.md`
+
+任意で、gitのコミットテンプレートを有効化できます。
+
+```bash
+git config commit.template .gitmessage.txt
+```
+
 ---
 
 ## Roadmap

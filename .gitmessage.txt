@@ -1,0 +1,7 @@
+# <type>(<scope>): <subject>
+#
+# body (必要な場合のみ)
+# - 変更点1
+# - 変更点2
+#
+# BREAKING CHANGE: 互換性がない変更内容
