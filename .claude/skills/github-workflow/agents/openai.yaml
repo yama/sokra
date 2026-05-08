@@ -1,0 +1,4 @@
+interface:
+  display_name: "GitHub作業"
+  short_description: "GitHub関連作業の共通フロー"
+  default_prompt: "Use $github-workflow to進める前提で、この GitHub 作業の対象特定、証拠収集、実行手順を整理してください。"

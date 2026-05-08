@@ -112,6 +112,37 @@ Session logs are saved on the server under `data/sessions/*.jsonl`.
 git config commit.template .gitmessage.txt
 ```
 
+## Shared Skills
+
+共用スキルの正本は `skills/` 配下です。
+3系統をまとめて同期する場合は、次を使います。
+
+```bash
+bash scripts/sync-all-skills.sh
+```
+
+個別に同期する場合は次のスクリプトを使います。
+
+Codex で UI から使う場合は、次で `~/.codex/skills/sokra/` へコピーします。
+
+```bash
+bash scripts/install-skills.sh
+```
+
+Claude Code でプロジェクトスキルとして使う場合は、次で `.claude/skills/` へ同期します。
+
+```bash
+bash scripts/sync-claude-skills.sh
+```
+
+GitHub Copilot で再利用プロンプトとして使う場合は、次で `.github/prompts/` を生成します。
+
+```bash
+bash scripts/sync-copilot-prompts.sh
+```
+
+Copilot で prompt files を使うには、IDE 側で `chat.promptFiles` を有効にする必要があります。
+
 ---
 
 ## Roadmap

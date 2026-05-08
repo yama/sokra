@@ -1,10 +1,14 @@
-# Copilot Instructions
+# GitHub Copilot Repository Instructions
 
-このリポジトリでコミットメッセージを生成する際は、以下を厳守してください。
+このリポジトリの AI 向け共通ルールは、リポジトリルートの `AGENTS.md` が正本です。
+GitHub Copilot を使う場合も、まず `AGENTS.md` を参照してください。
 
-1. docs/commit-convention.md の規約に従う
-2. 日本語の Conventional Commits 形式を使う
-3. 変更差分に存在しない内容を書かない
-4. 出力はコミットメッセージ本文のみ
+## Priority
 
-テンプレートは docs/commit-prompt.md を参照してください。
+1. `AGENTS.md`
+2. GitHub Copilot 固有の追加指示
+
+## Notes
+
+- 共通ルールをこのファイルに重複記載しない
+- コミットメッセージ方針も `AGENTS.md` と参照先ドキュメントに従う

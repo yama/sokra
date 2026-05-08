@@ -1,0 +1,4 @@
+interface:
+  display_name: "一般レビュー"
+  short_description: "コードや設定の変更をレビューする"
+  default_prompt: "Use $review-workflow to、この変更差分の問題点、退行リスク、変更漏れ、テスト不足を優先度順にレビューしてください。"

@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI文書改修"
+  short_description: "AI向け文書の改修と追従更新を行う"
+  default_prompt: "Use $ai-doc-edit to、この AI 向け文書改修で正本、参照先、関連スキルまで含めて整合が取れるように更新してください。"

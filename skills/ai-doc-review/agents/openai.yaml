@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI文書レビュー"
+  short_description: "AI向け文書の整合と曖昧さを確認"
+  default_prompt: "Use $ai-doc-review to、この AI 向け文書変更の SSOT、参照整合、重複、曖昧表現、更新漏れをレビューしてください。"

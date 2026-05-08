@@ -1,0 +1,4 @@
+interface:
+  display_name: "コミット文作成"
+  short_description: "差分からコミット文を組み立てる"
+  default_prompt: "Use $commit-message to、現在の差分から日本語の Conventional Commits 形式のコミットメッセージ本文だけを作成してください。"
