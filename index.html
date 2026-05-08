@@ -1,346 +1,527 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>セミナーインタビュー</title>
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+    <title>セミナーインタビュー</title>
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
-  :root {
-    --bg: #f7f6f3;
-    --surface: #ffffff;
-    --surface2: #f0ede8;
-    --border: #e0dbd3;
-    --text: #1a1917;
-    --text2: #6b6760;
-    --text3: #a09c97;
-    --accent: #2c5f8a;
-    --accent-bg: #e8f0f8;
-    --accent-text: #1a3f5c;
-    --success: #2d7a4f;
-    --success-bg: #e8f5ee;
-    --danger: #c0392b;
-  }
+        :root {
+            --bg: #f7f6f3;
+            --surface: #ffffff;
+            --surface2: #f0ede8;
+            --border: #e0dbd3;
+            --text: #1a1917;
+            --text2: #6b6760;
+            --text3: #a09c97;
+            --accent: #2c5f8a;
+            --accent-bg: #e8f0f8;
+            --accent-text: #1a3f5c;
+            --success: #2d7a4f;
+            --success-bg: #e8f5ee;
+            --danger: #c0392b;
+        }
 
-  body {
-    font-family: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 1rem;
-  }
+        body {
+            font-family: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
 
-  /* APIキー入力画面 */
-  #apiScreen {
-    width: 100%;
-    max-width: 420px;
-    background: var(--surface);
-    border-radius: 16px;
-    border: 1px solid var(--border);
-    padding: 2rem;
-  }
-  #apiScreen h1 {
-    font-size: 16px;
-    font-weight: 600;
-    margin-bottom: 6px;
-  }
-  #apiScreen p {
-    font-size: 13px;
-    color: var(--text2);
-    margin-bottom: 1.5rem;
-    line-height: 1.6;
-  }
-  #apiScreen input {
-    width: 100%;
-    padding: 10px 12px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    font-size: 14px;
-    font-family: monospace;
-    background: var(--surface2);
-    color: var(--text);
-    outline: none;
-    margin-bottom: 12px;
-  }
-  #apiScreen input:focus { border-color: var(--accent); }
-  #apiScreen button {
-    width: 100%;
-    padding: 10px;
-    border-radius: 8px;
-    border: none;
-    background: var(--accent);
-    color: #fff;
-    font-size: 14px;
-    cursor: pointer;
-    font-family: inherit;
-  }
-  #apiScreen button:hover { opacity: 0.9; }
-  .api-error { font-size: 12px; color: var(--danger); margin-top: 8px; display: none; }
+        /* APIキー入力画面 */
+        #apiScreen {
+            width: 100%;
+            max-width: 420px;
+            background: var(--surface);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            padding: 2rem;
+        }
 
-  /* メイン画面 */
-  #mainScreen {
-    display: none;
-    width: 100%;
-    max-width: 640px;
-    height: 100vh;
-    max-height: 800px;
-    background: var(--surface);
-    border-radius: 16px;
-    border: 1px solid var(--border);
-    flex-direction: column;
-    overflow: hidden;
-  }
+        #apiScreen h1 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
 
-  .chat-header {
-    padding: 14px 20px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-shrink: 0;
-  }
-  .chat-header-title { font-size: 14px; font-weight: 600; }
-  .chat-header-sub { font-size: 12px; color: var(--text3); margin-top: 2px; }
+        #apiScreen p {
+            font-size: 13px;
+            color: var(--text2);
+            margin-bottom: 1.5rem;
+            line-height: 1.6;
+        }
 
-  .progress-wrap {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-  }
-  .progress-dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: var(--border);
-    transition: background 0.3s;
-  }
-  .progress-dot.done { background: var(--success); }
+        #apiScreen input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: monospace;
+            background: var(--surface2);
+            color: var(--text);
+            outline: none;
+            margin-bottom: 12px;
+        }
 
-  .messages {
-    flex: 1;
-    overflow-y: auto;
-    padding: 1.25rem 1.25rem 0.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
+        #apiScreen input:focus {
+            border-color: var(--accent);
+        }
 
-  .msg { display: flex; flex-direction: column; gap: 4px; }
-  .msg.ai { align-items: flex-start; }
-  .msg.user { align-items: flex-end; }
+        .model-select-wrap {
+            margin-bottom: 12px;
+        }
 
-  .bubble {
-    max-width: 78%;
-    padding: 10px 14px;
-    border-radius: 18px;
-    font-size: 14px;
-    line-height: 1.65;
-  }
-  .ai .bubble {
-    background: var(--surface2);
-    color: var(--text);
-    border-bottom-left-radius: 4px;
-  }
-  .user .bubble {
-    background: var(--accent-bg);
-    color: var(--accent-text);
-    border-bottom-right-radius: 4px;
-  }
+        .model-select-wrap label {
+            display: block;
+            font-size: 12px;
+            color: var(--text2);
+            margin-bottom: 6px;
+        }
 
-  .choices {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 7px;
-    margin-top: 8px;
-  }
-  .choice-btn {
-    padding: 7px 14px;
-    border-radius: 20px;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text);
-    font-size: 13px;
-    font-family: inherit;
-    cursor: pointer;
-    transition: background 0.15s, border-color 0.15s;
-  }
-  .choice-btn:hover { background: var(--surface2); border-color: var(--text3); }
-  .choice-btn:disabled { opacity: 0.4; cursor: default; }
+        .model-select-wrap select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            background: var(--surface2);
+            color: var(--text);
+            outline: none;
+        }
 
-  .typing {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 10px 14px;
-    background: var(--surface2);
-    border-radius: 18px;
-    border-bottom-left-radius: 4px;
-    width: fit-content;
-  }
-  .dot {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--text3);
-    animation: bounce 1.2s infinite;
-  }
-  .dot:nth-child(2) { animation-delay: 0.2s; }
-  .dot:nth-child(3) { animation-delay: 0.4s; }
-  @keyframes bounce {
-    0%,60%,100% { transform: translateY(0); }
-    30% { transform: translateY(-5px); }
-  }
+        .model-select-wrap select:focus {
+            border-color: var(--accent);
+        }
 
-  .input-area {
-    padding: 12px 16px;
-    border-top: 1px solid var(--border);
-    display: none;
-    gap: 8px;
-    align-items: flex-end;
-    flex-shrink: 0;
-  }
-  .input-area textarea {
-    flex: 1;
-    resize: none;
-    border-radius: 12px;
-    border: 1px solid var(--border);
-    padding: 10px 12px;
-    font-size: 14px;
-    font-family: inherit;
-    line-height: 1.5;
-    background: var(--surface2);
-    color: var(--text);
-    outline: none;
-    height: 42px;
-    max-height: 120px;
-    overflow-y: auto;
-    transition: border-color 0.15s;
-  }
-  .input-area textarea:focus { border-color: var(--accent); background: var(--surface); }
-  .send-btn {
-    width: 42px; height: 42px;
-    border-radius: 50%;
-    border: none;
-    background: var(--accent);
-    color: #fff;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    transition: opacity 0.15s;
-  }
-  .send-btn:hover { opacity: 0.85; }
-  .send-btn:disabled { opacity: 0.35; cursor: default; }
-  .send-btn svg { width: 18px; height: 18px; }
+        #apiScreen button {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            border: none;
+            background: var(--accent);
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+            font-family: inherit;
+        }
 
-  /* デバッグパネル */
-  .debug-panel {
-    padding: 10px 16px;
-    border-top: 1px solid var(--border);
-    background: var(--surface2);
-    flex-shrink: 0;
-  }
-  .debug-title {
-    font-size: 10px;
-    color: var(--text3);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    margin-bottom: 6px;
-  }
-  .check-items { display: flex; flex-wrap: wrap; gap: 6px; }
-  .check-item {
-    font-size: 11px;
-    padding: 3px 10px;
-    border-radius: 12px;
-    border: 1px solid var(--border);
-    color: var(--text3);
-    background: var(--surface);
-  }
-  .check-item.done {
-    background: var(--success-bg);
-    color: var(--success);
-    border-color: transparent;
-  }
+        #apiScreen button:hover {
+            opacity: 0.9;
+        }
 
-  .log-btn {
-    margin-top: 8px;
-    padding: 6px 12px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: transparent;
-    color: var(--text2);
-    font-size: 12px;
-    font-family: inherit;
-    cursor: pointer;
-    display: none;
-  }
-  .log-btn:hover { background: var(--surface); }
+        .api-error {
+            font-size: 12px;
+            color: var(--danger);
+            margin-top: 8px;
+            display: none;
+        }
 
-  .ended-note {
-    font-size: 13px;
-    color: var(--text3);
-    text-align: center;
-    padding: 8px;
-    display: none;
-  }
-</style>
+        /* メイン画面 */
+        #mainScreen {
+            display: none;
+            width: 100%;
+            max-width: 640px;
+            height: 100vh;
+            max-height: 800px;
+            background: var(--surface);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .chat-header-title {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .chat-header-sub {
+            font-size: 12px;
+            color: var(--text3);
+            margin-top: 2px;
+        }
+
+        .progress-wrap {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .progress-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--border);
+            transition: background 0.3s;
+        }
+
+        .progress-dot.done {
+            background: var(--success);
+        }
+
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.25rem 1.25rem 0.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .msg {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .msg.ai {
+            align-items: flex-start;
+        }
+
+        .msg.user {
+            align-items: flex-end;
+        }
+
+        .bubble {
+            max-width: 78%;
+            padding: 10px 14px;
+            border-radius: 18px;
+            font-size: 14px;
+            line-height: 1.65;
+        }
+
+        .ai .bubble {
+            background: var(--surface2);
+            color: var(--text);
+            border-bottom-left-radius: 4px;
+        }
+
+        .user .bubble {
+            background: var(--accent-bg);
+            color: var(--accent-text);
+            border-bottom-right-radius: 4px;
+        }
+
+        .choices {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+            margin-top: 8px;
+        }
+
+        .choice-btn {
+            padding: 7px 14px;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+            font-size: 13px;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+
+        .choice-btn:hover {
+            background: var(--surface2);
+            border-color: var(--text3);
+        }
+
+        .choice-btn:disabled {
+            opacity: 0.4;
+            cursor: default;
+        }
+
+        .typing {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 10px 14px;
+            background: var(--surface2);
+            border-radius: 18px;
+            border-bottom-left-radius: 4px;
+            width: fit-content;
+        }
+
+        .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--text3);
+            animation: bounce 1.2s infinite;
+        }
+
+        .dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes bounce {
+
+            0%,
+            60%,
+            100% {
+                transform: translateY(0);
+            }
+
+            30% {
+                transform: translateY(-5px);
+            }
+        }
+
+        .input-area {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border);
+            display: none;
+            gap: 8px;
+            align-items: flex-end;
+            flex-shrink: 0;
+        }
+
+        .input-area textarea {
+            flex: 1;
+            resize: none;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            padding: 10px 12px;
+            font-size: 14px;
+            font-family: inherit;
+            line-height: 1.5;
+            background: var(--surface2);
+            color: var(--text);
+            outline: none;
+            height: 42px;
+            max-height: 120px;
+            overflow-y: auto;
+            transition: border-color 0.15s;
+        }
+
+        .input-area textarea:focus {
+            border-color: var(--accent);
+            background: var(--surface);
+        }
+
+        .send-btn {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            border: none;
+            background: var(--accent);
+            color: #fff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: opacity 0.15s;
+        }
+
+        .send-btn:hover {
+            opacity: 0.85;
+        }
+
+        .send-btn:disabled {
+            opacity: 0.35;
+            cursor: default;
+        }
+
+        .send-btn svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        /* デバッグパネル */
+        .debug-panel {
+            padding: 10px 16px;
+            border-top: 1px solid var(--border);
+            background: var(--surface2);
+            flex-shrink: 0;
+        }
+
+        .debug-title {
+            font-size: 10px;
+            color: var(--text3);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 6px;
+        }
+
+        .check-items {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .check-item {
+            font-size: 11px;
+            padding: 3px 10px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            color: var(--text3);
+            background: var(--surface);
+        }
+
+        .check-item.done {
+            background: var(--success-bg);
+            color: var(--success);
+            border-color: transparent;
+        }
+
+        .log-btn {
+            margin-top: 8px;
+            padding: 6px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text2);
+            font-size: 12px;
+            font-family: inherit;
+            cursor: pointer;
+            display: none;
+        }
+
+        .log-btn:hover {
+            background: var(--surface);
+        }
+
+        .usage-stats {
+            margin-top: 8px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            font-size: 12px;
+            color: var(--text2);
+            line-height: 1.6;
+        }
+
+        .ended-note {
+            font-size: 13px;
+            color: var(--text3);
+            text-align: center;
+            padding: 8px;
+            display: none;
+        }
+    </style>
 </head>
+
 <body>
 
-<!-- APIキー入力画面 -->
-<div id="apiScreen">
-  <h1>セミナーインタビュー</h1>
-  <p>Anthropic APIキーを入力してください。<br>キーはこのブラウザセッション内のみで使用されます。</p>
-  <input type="password" id="apiKeyInput" placeholder="sk-ant-..." autocomplete="off">
-  <button id="startBtn">開始する</button>
-  <div class="api-error" id="apiError">APIキーを入力してください</div>
-</div>
-
-<!-- メイン画面 -->
-<div id="mainScreen">
-  <div class="chat-header">
-    <div>
-      <div class="chat-header-title">AI活用セミナー</div>
-      <div class="chat-header-sub">インタビュー</div>
+    <!-- APIキー入力画面 -->
+    <div id="apiScreen">
+        <h1>セミナーインタビュー</h1>
+        <p>Gemini APIキーを入力してください。<br>キーはこのブラウザセッション内のみで使用されます。</p>
+        <input type="password"
+               id="apiKeyInput"
+               placeholder="AIza..."
+               autocomplete="off">
+        <div class="model-select-wrap">
+            <label for="modelSelect">モデル</label>
+            <select id="modelSelect">
+                <option value="gemini-2.5-flash"
+                        selected>gemini-2.5-flash（高速・低コスト）</option>
+                <option value="gemini-2.5-pro">gemini-2.5-pro（高品質・高コスト）</option>
+            </select>
+        </div>
+        <button id="startBtn">開始する</button>
+        <div class="api-error"
+             id="apiError">APIキーを入力してください</div>
     </div>
-    <div class="progress-wrap" id="progressDots"></div>
-  </div>
 
-  <div class="messages" id="messages"></div>
+    <!-- メイン画面 -->
+    <div id="mainScreen">
+        <div class="chat-header">
+            <div>
+                <div class="chat-header-title">AI活用セミナー</div>
+                <div class="chat-header-sub">インタビュー</div>
+            </div>
+            <div class="progress-wrap"
+                 id="progressDots"></div>
+        </div>
 
-  <div class="input-area" id="inputArea">
-    <textarea id="userInput" placeholder="気軽に話してください"></textarea>
-    <button class="send-btn" id="sendBtn" aria-label="送信">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="12" y1="19" x2="12" y2="5"></line>
-        <polyline points="5 12 12 5 19 12"></polyline>
-      </svg>
-    </button>
-  </div>
+        <div class="messages"
+             id="messages"></div>
 
-  <div class="debug-panel">
-    <div class="debug-title">通過地点（開発用表示）</div>
-    <div class="check-items" id="checkItems"></div>
-    <div class="ended-note" id="endedNote">会話が完了しました</div>
-    <button class="log-btn" id="logBtn">JSONログをダウンロード</button>
-  </div>
-</div>
+        <div class="input-area"
+             id="inputArea">
+            <textarea id="userInput"
+                      placeholder="気軽に話してください"></textarea>
+            <button class="send-btn"
+                    id="sendBtn"
+                    aria-label="送信">
+                <svg viewBox="0 0 24 24"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2.5"
+                     stroke-linecap="round"
+                     stroke-linejoin="round">
+                    <line x1="12"
+                          y1="19"
+                          x2="12"
+                          y2="5"></line>
+                    <polyline points="5 12 12 5 19 12"></polyline>
+                </svg>
+            </button>
+        </div>
 
-<script>
-let API_KEY = "";
+        <div class="debug-panel">
+            <div class="debug-title">通過地点（開発用表示）</div>
+            <div class="check-items"
+                 id="checkItems"></div>
+            <div class="usage-stats"
+                 id="usageStats"></div>
+            <div class="ended-note"
+                 id="endedNote">会話が完了しました</div>
+            <button class="log-btn"
+                    id="logBtn">JSONログをダウンロード</button>
+        </div>
+    </div>
 
-const CHECKPOINTS = [
-  { id: "background", label: "参加背景", done: false },
-  { id: "temperature", label: "温度感", done: false },
-  { id: "impression", label: "印象点", done: false },
-  { id: "difficulty", label: "違和感・難しさ", done: false },
-  { id: "practical", label: "実務との接点", done: false }
-];
+    <script>
+        let API_KEY = "";
+        let MODEL_NAME = "gemini-2.5-flash";
+        const USD_TO_JPY = 155;
+        const MODEL_PRICING_USD_PER_1M = {
+            "gemini-2.5-flash": { input: 0.30, output: 2.50 },
+            "gemini-2.5-pro": { input: 1.25, output: 10.00 }
+        };
 
-const SYSTEM_PROMPT = `あなたはセミナー参加者に自然な会話でインタビューするAIです。
+        const CHECKPOINTS = [
+            { id: "background", label: "参加背景", done: false },
+            { id: "temperature", label: "温度感", done: false },
+            { id: "impression", label: "印象点", done: false },
+            { id: "difficulty", label: "違和感・難しさ", done: false },
+            { id: "practical", label: "実務との接点", done: false }
+        ];
+
+        const SYSTEM_PROMPT = `あなたはセミナー参加者に自然な会話でインタビューするAIです。
 
 【セミナー情報】
 タイトル: AI活用セミナー
@@ -379,270 +560,309 @@ const SYSTEM_PROMPT = `あなたはセミナー参加者に自然な会話でイ
 必ずJSON形式のみで返す。前置きや説明は不要。
 {"text": "AIの返答テキスト", "checkpoints_filled": ["background"]}`;
 
-let conversationHistory = [];
-let sessionContext = { format: null, timing: null, mood: null };
-let checkpoints = CHECKPOINTS.map(c => ({ ...c }));
-let sessionLog = [];
+        let conversationHistory = [];
+        let sessionContext = { format: null, timing: null, mood: null };
+        let checkpoints = CHECKPOINTS.map(c => ({ ...c }));
+        let sessionLog = [];
+        let usageSummary = { requests: 0, prompt: 0, output: 0, total: 0, costUsd: 0, costJpy: 0 };
 
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// --- UI helpers ---
-function scrollDown() {
-  setTimeout(() => {
-    const el = document.getElementById("messages");
-    el.scrollTop = el.scrollHeight;
-  }, 50);
-}
-
-function addMessage(role, text) {
-  const msgs = document.getElementById("messages");
-  const div = document.createElement("div");
-  div.className = `msg ${role}`;
-  const bubble = document.createElement("div");
-  bubble.className = "bubble";
-  bubble.textContent = text;
-  div.appendChild(bubble);
-  msgs.appendChild(div);
-  scrollDown();
-  return div;
-}
-
-function showTyping() {
-  const msgs = document.getElementById("messages");
-  const div = document.createElement("div");
-  div.className = "msg ai"; div.id = "typing";
-  div.innerHTML = `<div class="typing"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>`;
-  msgs.appendChild(div); scrollDown();
-}
-function removeTyping() { const t = document.getElementById("typing"); if (t) t.remove(); }
-
-function showChoices(choices, onSelect) {
-  const msgs = document.getElementById("messages");
-  const lastAI = [...msgs.querySelectorAll(".msg.ai")].pop();
-  if (!lastAI) return;
-  const wrap = document.createElement("div");
-  wrap.className = "choices";
-  choices.forEach(c => {
-    const btn = document.createElement("button");
-    btn.className = "choice-btn"; btn.textContent = c.label;
-    btn.onclick = () => {
-      wrap.querySelectorAll(".choice-btn").forEach(b => b.disabled = true);
-      onSelect(c);
-    };
-    wrap.appendChild(btn);
-  });
-  lastAI.appendChild(wrap); scrollDown();
-}
-
-function updateChecklist() {
-  const el = document.getElementById("checkItems");
-  el.innerHTML = checkpoints.map(c =>
-    `<div class="check-item ${c.done ? "done" : ""}">${c.label}</div>`
-  ).join("");
-
-  // プログレスドット更新
-  const dots = document.getElementById("progressDots");
-  dots.innerHTML = checkpoints.map(c =>
-    `<div class="progress-dot ${c.done ? "done" : ""}"></div>`
-  ).join("");
-}
-
-function markCheckpoints(ids) {
-  ids.forEach(id => {
-    const cp = checkpoints.find(c => c.id === id);
-    if (cp) cp.done = true;
-  });
-  updateChecklist();
-}
-
-function allDone() { return checkpoints.every(c => c.done); }
-
-// --- API ---
-async function callClaude(userText) {
-  conversationHistory.push({ role: "user", content: userText });
-
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": API_KEY,
-      "anthropic-version": "2023-06-01"
-    },
-    body: JSON.stringify({
-      model: "claude-opus-4-5",
-      max_tokens: 1000,
-      system: SYSTEM_PROMPT,
-      messages: conversationHistory
-    })
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`API Error ${res.status}: ${err}`);
-  }
-
-  const data = await res.json();
-  const raw = data.content?.[0]?.text || '{"text":"うん。","checkpoints_filled":[]}';
-  let parsed;
-  try { parsed = JSON.parse(raw.replace(/```json|```/g, "").trim()); }
-  catch { parsed = { text: raw, checkpoints_filled: [] }; }
-  conversationHistory.push({ role: "assistant", content: raw });
-  return parsed;
-}
-
-// --- 送信 ---
-async function sendUserMessage(text) {
-  if (!text.trim()) return;
-  addMessage("user", text);
-  sessionLog.push({ role: "user", text });
-  showTyping();
-  document.getElementById("sendBtn").disabled = true;
-  try {
-    const result = await callClaude(text);
-    removeTyping();
-    addMessage("ai", result.text);
-    sessionLog.push({ role: "ai", text: result.text });
-    if (result.checkpoints_filled?.length) markCheckpoints(result.checkpoints_filled);
-    if (allDone()) setTimeout(endSession, 800);
-  } catch(e) {
-    removeTyping();
-    addMessage("ai", "少し問題が発生しました: " + e.message);
-  }
-  document.getElementById("sendBtn").disabled = false;
-}
-
-function endSession() {
-  document.getElementById("inputArea").style.display = "none";
-  document.getElementById("endedNote").style.display = "block";
-  document.getElementById("logBtn").style.display = "inline-block";
-}
-
-// --- チャット開始 ---
-async function startChatPhase() {
-  document.getElementById("inputArea").style.display = "flex";
-  const ctx = `参加形式: ${sessionContext.format}、タイミング: ${sessionContext.timing}、最初の温度感: ${sessionContext.mood}。ここから自由会話を始めてください。`;
-  conversationHistory.push({ role: "user", content: ctx });
-  showTyping();
-  try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": API_KEY,
-        "anthropic-version": "2023-06-01"
-      },
-      body: JSON.stringify({
-        model: "claude-opus-4-5",
-        max_tokens: 1000,
-        system: SYSTEM_PROMPT,
-        messages: conversationHistory
-      })
-    });
-    const data = await res.json();
-    const raw = data.content?.[0]?.text || '{"text":"そっか。どのあたりが印象残ってます？","checkpoints_filled":[]}';
-    let parsed;
-    try { parsed = JSON.parse(raw.replace(/```json|```/g, "").trim()); }
-    catch { parsed = { text: raw, checkpoints_filled: [] }; }
-    conversationHistory.push({ role: "assistant", content: raw });
-    removeTyping();
-    addMessage("ai", parsed.text);
-    sessionLog.push({ role: "ai", text: parsed.text });
-  } catch(e) {
-    removeTyping();
-    addMessage("ai", "今日はどうでしたか？");
-  }
-}
-
-// --- ボタン選択フェーズ ---
-async function runButtonPhase() {
-  await sleep(500);
-  addMessage("ai", "今日はありがとうございました。少しだけ話聞かせてもらえますか？");
-  await sleep(400);
-  showChoices(
-    [{ label: "現地参加", value: "現地" }, { label: "オンライン参加", value: "オンライン" }],
-    async (c) => {
-      sessionContext.format = c.value;
-      addMessage("user", c.label);
-      sessionLog.push({ role: "user", text: c.label, type: "button" });
-      await sleep(700);
-      addMessage("ai", "そうなんですね。仕事終わりでした？");
-      await sleep(400);
-      showChoices(
-        [{ label: "仕事終わり", value: "仕事終わり" }, { label: "休日", value: "休日" }, { label: "その他", value: "その他" }],
-        async (c2) => {
-          sessionContext.timing = c2.value;
-          addMessage("user", c2.label);
-          sessionLog.push({ role: "user", text: c2.label, type: "button" });
-          await sleep(700);
-          addMessage("ai", "今日のセミナー、全体的にどうでした？");
-          await sleep(400);
-          showChoices(
-            [
-              { label: "よかった", value: "よかった" },
-              { label: "まあまあ", value: "まあまあ" },
-              { label: "難しかった", value: "難しかった" },
-              { label: "よく分からなかった", value: "よく分からなかった" }
-            ],
-            async (c3) => {
-              sessionContext.mood = c3.value;
-              addMessage("user", c3.label);
-              sessionLog.push({ role: "user", text: c3.label, type: "button" });
-              markCheckpoints(["temperature"]);
-              await sleep(800);
-              startChatPhase();
-            }
-          );
+        // --- UI helpers ---
+        function scrollDown() {
+            setTimeout(() => {
+                const el = document.getElementById("messages");
+                el.scrollTop = el.scrollHeight;
+            }, 50);
         }
-      );
-    }
-  );
-}
 
-// --- イベント ---
-document.getElementById("startBtn").addEventListener("click", () => {
-  const key = document.getElementById("apiKeyInput").value.trim();
-  if (!key) {
-    document.getElementById("apiError").style.display = "block";
-    return;
-  }
-  API_KEY = key;
-  document.getElementById("apiScreen").style.display = "none";
-  document.getElementById("mainScreen").style.display = "flex";
-  updateChecklist();
-  runButtonPhase();
-});
+        function addMessage(role, text) {
+            const msgs = document.getElementById("messages");
+            const div = document.createElement("div");
+            div.className = `msg ${role}`;
+            const bubble = document.createElement("div");
+            bubble.className = "bubble";
+            bubble.textContent = text;
+            div.appendChild(bubble);
+            msgs.appendChild(div);
+            scrollDown();
+            return div;
+        }
 
-document.getElementById("apiKeyInput").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") document.getElementById("startBtn").click();
-});
+        function showTyping() {
+            const msgs = document.getElementById("messages");
+            const div = document.createElement("div");
+            div.className = "msg ai"; div.id = "typing";
+            div.innerHTML = `<div class="typing"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>`;
+            msgs.appendChild(div); scrollDown();
+        }
+        function removeTyping() { const t = document.getElementById("typing"); if (t) t.remove(); }
 
-document.getElementById("sendBtn").addEventListener("click", () => {
-  const ta = document.getElementById("userInput");
-  const text = ta.value.trim();
-  if (text) { ta.value = ""; ta.style.height = "42px"; sendUserMessage(text); }
-});
+        function showChoices(choices, onSelect) {
+            const msgs = document.getElementById("messages");
+            const lastAI = [...msgs.querySelectorAll(".msg.ai")].pop();
+            if (!lastAI) return;
+            const wrap = document.createElement("div");
+            wrap.className = "choices";
+            choices.forEach(c => {
+                const btn = document.createElement("button");
+                btn.className = "choice-btn"; btn.textContent = c.label;
+                btn.onclick = () => {
+                    wrap.querySelectorAll(".choice-btn").forEach(b => b.disabled = true);
+                    onSelect(c);
+                };
+                wrap.appendChild(btn);
+            });
+            lastAI.appendChild(wrap); scrollDown();
+        }
 
-document.getElementById("userInput").addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); document.getElementById("sendBtn").click(); }
-});
+        function updateChecklist() {
+            const el = document.getElementById("checkItems");
+            el.innerHTML = checkpoints.map(c =>
+                `<div class="check-item ${c.done ? "done" : ""}">${c.label}</div>`
+            ).join("");
 
-document.getElementById("userInput").addEventListener("input", function() {
-  this.style.height = "42px";
-  this.style.height = Math.min(this.scrollHeight, 120) + "px";
-});
+            // プログレスドット更新
+            const dots = document.getElementById("progressDots");
+            dots.innerHTML = checkpoints.map(c =>
+                `<div class="progress-dot ${c.done ? "done" : ""}"></div>`
+            ).join("");
+        }
 
-document.getElementById("logBtn").addEventListener("click", () => {
-  const log = {
-    session_id: "proto_" + Date.now(),
-    seminar_context: sessionContext,
-    checkpoints: checkpoints,
-    conversation: sessionLog
-  };
-  const blob = new Blob([JSON.stringify(log, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a"); a.href = url; a.download = "interview_log.json"; a.click();
-  URL.revokeObjectURL(url);
-});
-</script>
+        function markCheckpoints(ids) {
+            ids.forEach(id => {
+                const cp = checkpoints.find(c => c.id === id);
+                if (cp) cp.done = true;
+            });
+            updateChecklist();
+        }
+
+        function allDone() { return checkpoints.every(c => c.done); }
+
+        function formatInt(n) { return Number(n || 0).toLocaleString("ja-JP"); }
+        function formatYen(n) { return `${Math.round(Number(n || 0)).toLocaleString("ja-JP")}円`; }
+
+        function estimateCost(promptTokens, outputTokens, modelName) {
+            const price = MODEL_PRICING_USD_PER_1M[modelName] || MODEL_PRICING_USD_PER_1M["gemini-2.5-flash"];
+            const usd = (promptTokens / 1_000_000) * price.input + (outputTokens / 1_000_000) * price.output;
+            return { usd, jpy: usd * USD_TO_JPY };
+        }
+
+        function updateUsageStats(lastUsage) {
+            const el = document.getElementById("usageStats");
+            if (!el) return;
+            const lastText = lastUsage
+                ? `直近: in ${formatInt(lastUsage.prompt)} / out ${formatInt(lastUsage.output)} / total ${formatInt(lastUsage.total)} / ${formatYen(lastUsage.costJpy)}（約$${lastUsage.costUsd.toFixed(4)}）`
+                : "直近: -";
+            el.innerHTML = [
+                `モデル: ${MODEL_NAME}（$1=${USD_TO_JPY}円で概算）`,
+                `リクエスト: ${formatInt(usageSummary.requests)}回`,
+                `累計: in ${formatInt(usageSummary.prompt)} / out ${formatInt(usageSummary.output)} / total ${formatInt(usageSummary.total)}`,
+                `累計コスト: ${formatYen(usageSummary.costJpy)}（約$${usageSummary.costUsd.toFixed(4)}）`,
+                lastText
+            ].join("<br>");
+        }
+
+        // --- API ---
+        function toGeminiContents(history) {
+            return history.map(m => ({
+                role: m.role === "assistant" ? "model" : "user",
+                parts: [{ text: m.content }]
+            }));
+        }
+
+        async function callGemini(userText) {
+            conversationHistory.push({ role: "user", content: userText });
+
+            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${encodeURIComponent(API_KEY)}`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+                    generationConfig: { maxOutputTokens: 1000 },
+                    contents: toGeminiContents(conversationHistory)
+                })
+            });
+
+            if (!res.ok) {
+                const err = await res.text();
+                throw new Error(`API Error ${res.status}: ${err}`);
+            }
+
+            const data = await res.json();
+            const raw = data.candidates?.[0]?.content?.parts?.map(p => p.text).join("") || '{"text":"うん。","checkpoints_filled":[]}';
+            const usage = data.usageMetadata || {};
+            const promptTokens = usage.promptTokenCount || 0;
+            const outputTokens = usage.candidatesTokenCount || usage.outputTokenCount || 0;
+            const totalTokens = usage.totalTokenCount || (promptTokens + outputTokens);
+            const estimated = estimateCost(promptTokens, outputTokens, MODEL_NAME);
+
+            usageSummary.requests += 1;
+            usageSummary.prompt += promptTokens;
+            usageSummary.output += outputTokens;
+            usageSummary.total += totalTokens;
+            usageSummary.costUsd += estimated.usd;
+            usageSummary.costJpy += estimated.jpy;
+
+            let parsed;
+            try { parsed = JSON.parse(raw.replace(/```json|```/g, "").trim()); }
+            catch { parsed = { text: raw, checkpoints_filled: [] }; }
+            conversationHistory.push({ role: "assistant", content: raw });
+            return {
+                ...parsed,
+                usage: {
+                    prompt: promptTokens,
+                    output: outputTokens,
+                    total: totalTokens,
+                    costUsd: estimated.usd,
+                    costJpy: estimated.jpy,
+                    model: MODEL_NAME
+                }
+            };
+        }
+
+        // --- 送信 ---
+        async function sendUserMessage(text) {
+            if (!text.trim()) return;
+            addMessage("user", text);
+            sessionLog.push({ role: "user", text });
+            showTyping();
+            document.getElementById("sendBtn").disabled = true;
+            try {
+                const result = await callGemini(text);
+                removeTyping();
+                addMessage("ai", result.text);
+                sessionLog.push({ role: "ai", text: result.text, usage: result.usage });
+                updateUsageStats(result.usage);
+                if (result.checkpoints_filled?.length) markCheckpoints(result.checkpoints_filled);
+                if (allDone()) setTimeout(endSession, 800);
+            } catch (e) {
+                removeTyping();
+                addMessage("ai", "少し問題が発生しました: " + e.message);
+            }
+            document.getElementById("sendBtn").disabled = false;
+        }
+
+        function endSession() {
+            document.getElementById("inputArea").style.display = "none";
+            document.getElementById("endedNote").style.display = "block";
+            document.getElementById("logBtn").style.display = "inline-block";
+        }
+
+        // --- チャット開始 ---
+        async function startChatPhase() {
+            document.getElementById("inputArea").style.display = "flex";
+            const ctx = `参加形式: ${sessionContext.format}、タイミング: ${sessionContext.timing}、最初の温度感: ${sessionContext.mood}。ここから自由会話を始めてください。`;
+            showTyping();
+            try {
+                const parsed = await callGemini(ctx);
+                removeTyping();
+                addMessage("ai", parsed.text);
+                sessionLog.push({ role: "ai", text: parsed.text, usage: parsed.usage });
+                updateUsageStats(parsed.usage);
+            } catch (e) {
+                removeTyping();
+                addMessage("ai", "今日はどうでしたか？");
+            }
+        }
+
+        // --- ボタン選択フェーズ ---
+        async function runButtonPhase() {
+            await sleep(500);
+            addMessage("ai", "今日はありがとうございました。少しだけ話聞かせてもらえますか？");
+            await sleep(400);
+            showChoices(
+                [{ label: "現地参加", value: "現地" }, { label: "オンライン参加", value: "オンライン" }],
+                async (c) => {
+                    sessionContext.format = c.value;
+                    addMessage("user", c.label);
+                    sessionLog.push({ role: "user", text: c.label, type: "button" });
+                    await sleep(700);
+                    addMessage("ai", "そうなんですね。仕事終わりでした？");
+                    await sleep(400);
+                    showChoices(
+                        [{ label: "仕事終わり", value: "仕事終わり" }, { label: "休日", value: "休日" }, { label: "その他", value: "その他" }],
+                        async (c2) => {
+                            sessionContext.timing = c2.value;
+                            addMessage("user", c2.label);
+                            sessionLog.push({ role: "user", text: c2.label, type: "button" });
+                            await sleep(700);
+                            addMessage("ai", "今日のセミナー、全体的にどうでした？");
+                            await sleep(400);
+                            showChoices(
+                                [
+                                    { label: "よかった", value: "よかった" },
+                                    { label: "まあまあ", value: "まあまあ" },
+                                    { label: "難しかった", value: "難しかった" },
+                                    { label: "よく分からなかった", value: "よく分からなかった" }
+                                ],
+                                async (c3) => {
+                                    sessionContext.mood = c3.value;
+                                    addMessage("user", c3.label);
+                                    sessionLog.push({ role: "user", text: c3.label, type: "button" });
+                                    markCheckpoints(["temperature"]);
+                                    await sleep(800);
+                                    startChatPhase();
+                                }
+                            );
+                        }
+                    );
+                }
+            );
+        }
+
+        // --- イベント ---
+        document.getElementById("startBtn").addEventListener("click", () => {
+            const key = document.getElementById("apiKeyInput").value.trim();
+            if (!key) {
+                document.getElementById("apiError").style.display = "block";
+                return;
+            }
+            API_KEY = key;
+            MODEL_NAME = document.getElementById("modelSelect").value;
+            document.getElementById("apiScreen").style.display = "none";
+            document.getElementById("mainScreen").style.display = "flex";
+            updateChecklist();
+            updateUsageStats();
+            runButtonPhase();
+        });
+
+        document.getElementById("apiKeyInput").addEventListener("keydown", (e) => {
+            if (e.key === "Enter") document.getElementById("startBtn").click();
+        });
+
+        document.getElementById("sendBtn").addEventListener("click", () => {
+            const ta = document.getElementById("userInput");
+            const text = ta.value.trim();
+            if (text) { ta.value = ""; ta.style.height = "42px"; sendUserMessage(text); }
+        });
+
+        document.getElementById("userInput").addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); document.getElementById("sendBtn").click(); }
+        });
+
+        document.getElementById("userInput").addEventListener("input", function () {
+            this.style.height = "42px";
+            this.style.height = Math.min(this.scrollHeight, 120) + "px";
+        });
+
+        document.getElementById("logBtn").addEventListener("click", () => {
+            const log = {
+                session_id: "proto_" + Date.now(),
+                model: MODEL_NAME,
+                seminar_context: sessionContext,
+                usage_summary: usageSummary,
+                checkpoints: checkpoints,
+                conversation: sessionLog
+            };
+            const blob = new Blob([JSON.stringify(log, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a"); a.href = url; a.download = "interview_log.json"; a.click();
+            URL.revokeObjectURL(url);
+        });
+    </script>
 </body>
+
 </html>
