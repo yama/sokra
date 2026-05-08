@@ -65,23 +65,6 @@
             line-height: 1.6;
         }
 
-        #apiScreen input {
-            width: 100%;
-            padding: 10px 12px;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            font-size: 14px;
-            font-family: monospace;
-            background: var(--surface2);
-            color: var(--text);
-            outline: none;
-            margin-bottom: 12px;
-        }
-
-        #apiScreen input:focus {
-            border-color: var(--accent);
-        }
-
         .model-select-wrap {
             margin-bottom: 12px;
         }
@@ -437,11 +420,7 @@
     <!-- APIキー入力画面 -->
     <div id="apiScreen">
         <h1>セミナーインタビュー</h1>
-        <p>Gemini APIキーを入力してください。<br>キーはこのブラウザセッション内のみで使用されます。</p>
-        <input type="password"
-               id="apiKeyInput"
-               placeholder="AIza..."
-               autocomplete="off">
+        <p>サーバーの `.env` に設定されたGemini APIキーを使用します。<br>モデルを選んで開始してください。</p>
         <div class="model-select-wrap">
             <label for="modelSelect">モデル</label>
             <select id="modelSelect">
@@ -505,7 +484,6 @@
     </div>
 
     <script>
-        let API_KEY = "";
         let MODEL_NAME = "gemini-2.5-flash";
         let SESSION_ID = null;
         const USD_TO_JPY = 155;
@@ -705,7 +683,6 @@
                     "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
-                    apiKey: API_KEY,
                     model: MODEL_NAME,
                     systemPrompt: SYSTEM_PROMPT,
                     conversationHistory,
@@ -842,13 +819,7 @@
 
         // --- イベント ---
         document.getElementById("startBtn").addEventListener("click", async () => {
-            const key = document.getElementById("apiKeyInput").value.trim();
-            if (!key) {
-                document.getElementById("apiError").style.display = "block";
-                return;
-            }
             try {
-                API_KEY = key;
                 MODEL_NAME = document.getElementById("modelSelect").value;
                 await startServerSession();
                 document.getElementById("apiScreen").style.display = "none";
@@ -867,10 +838,6 @@
                 document.getElementById("apiError").textContent = e.message;
                 document.getElementById("apiError").style.display = "block";
             }
-        });
-
-        document.getElementById("apiKeyInput").addEventListener("keydown", (e) => {
-            if (e.key === "Enter") document.getElementById("startBtn").click();
         });
 
         document.getElementById("sendBtn").addEventListener("click", () => {

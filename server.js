@@ -5,9 +5,36 @@ const path = require("path");
 const crypto = require("crypto");
 
 const HOST = "0.0.0.0";
-const PORT = Number(process.env.PORT || 3000);
 const ROOT = __dirname;
 const SESSIONS_DIR = path.join(ROOT, "data", "sessions");
+
+function loadEnvFile() {
+    const envPath = path.join(ROOT, ".env");
+    if (!fs.existsSync(envPath)) return;
+
+    const lines = fs.readFileSync(envPath, "utf8").split("\n");
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#")) continue;
+
+        const idx = trimmed.indexOf("=");
+        if (idx <= 0) continue;
+
+        const key = trimmed.slice(0, idx).trim();
+        let value = trimmed.slice(idx + 1).trim();
+        if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+            value = value.slice(1, -1);
+        }
+
+        if (!(key in process.env)) {
+            process.env[key] = value;
+        }
+    }
+}
+
+loadEnvFile();
+
+const PORT = Number(process.env.PORT || 3000);
 
 async function ensureSessionsDir() {
     await fsp.mkdir(SESSIONS_DIR, { recursive: true });
@@ -95,9 +122,10 @@ function toGeminiContents(history, userText) {
     }));
 }
 
-async function callGemini({ apiKey, model, systemPrompt, conversationHistory, userText }) {
+async function callGemini({ model, systemPrompt, conversationHistory, userText }) {
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-        throw new Error("API key is required");
+        throw new Error("GEMINI_API_KEY is not set in .env");
     }
     const modelName = model || "gemini-2.5-flash";
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(apiKey)}`;
@@ -133,6 +161,10 @@ async function callGemini({ apiKey, model, systemPrompt, conversationHistory, us
 
 async function handleApi(req, res, url) {
     if (req.method === "POST" && url.pathname === "/api/session/start") {
+        if (!process.env.GEMINI_API_KEY) {
+            return sendJson(res, 500, { error: "サーバーにGEMINI_API_KEYが設定されていません。.envを確認してください。" });
+        }
+
         const bodyText = await readBody(req);
         const body = bodyText ? JSON.parse(bodyText) : {};
         const sessionId = makeSessionId();
@@ -183,7 +215,6 @@ async function handleApi(req, res, url) {
         const bodyText = await readBody(req);
         const body = bodyText ? JSON.parse(bodyText) : {};
         const result = await callGemini({
-            apiKey: body.apiKey,
             model: body.model,
             systemPrompt: body.systemPrompt,
             conversationHistory: body.conversationHistory,

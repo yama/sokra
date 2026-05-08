@@ -86,10 +86,12 @@ Default checkpoints:
 ```bash
 git clone https://github.com/yourname/sokra.git
 cd sokra
+cp .env.example .env
+# .env の GEMINI_API_KEY を設定
 npm start
 ```
 
-Open `http://localhost:3000` in your browser. Enter your Gemini API key when prompted.
+Open `http://localhost:3000` in your browser. サーバーの `.env` に設定した Gemini API key が使用されます。
 
 Session logs are saved on the server under `data/sessions/*.jsonl`.
 
