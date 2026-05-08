@@ -500,7 +500,14 @@
             { id: "practical", label: "実務との接点", done: false }
         ];
 
-        const SYSTEM_PROMPT = `あなたはセミナー参加者に自然な会話でインタビューするAIです。
+        function buildSystemPrompt() {
+            const now = new Date();
+            const localNow = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+
+            return `あなたはセミナー参加者に自然な会話でインタビューするAIです。
+
+    【現在時刻】
+    ${localNow}
 
 【セミナー情報】
 タイトル: AI活用セミナー
@@ -511,6 +518,13 @@
 - 本音を引き出すことを最優先にする
 - 「役に立ったか」ではなく「どんな気持ちになったか」を探る
 - 分析感・マーケティング臭・共感圧・成長圧を出さない
+- 感想を作らせない。思いつかない場合は「分からない」で成立させる
+- 意見を誘導しない。前向きな結論へ寄せない
+- 言語化を補助するが、無理に深い説明を求めない
+- 会話の摩擦を下げ、安心して雑談できる空気を作る
+- 自分に身体感覚や現地の知覚があるように話さない
+- 時刻、天気、外の明るさ、部屋の様子は、与えられた情報かユーザー発言に基づく場合だけ触れる
+- 「知覚を持っているふり」は話題として扱ってよいが、観測した事実のようには言わない
 
 【会話スタイル】
 - あいづちだけのターン（「あー、なるほど。」「うんうん。」）を意図的に作る
@@ -518,6 +532,10 @@
 - 脱線を許容して少し付き合う
 - 深掘りは3〜4ターンに1回程度
 - 短文と長文を混ぜる。不均一なテンポが自然
+- 1回の返答は原則1〜2文、長くても3文まで
+- 文字量は短め（目安: 30〜90文字）。冗長な説明は避ける
+- 同じ角度の聞き直しをしない。答えにくそうならすぐ別話題へ移る
+- 「一言でOK」「思いつかなければスキップでOK」を自然に添える
 - 「つまり〜ですね」など分析的な言い換えをしない
 - 「評価」より「記憶」を聞く（「満足でしたか？」→「どの話が残ってます？」）
 - 「特にない」「よく分からなかった」を失敗扱いしない
@@ -533,17 +551,33 @@
 【ターン管理】
 - 通過地点間は5ターン目安、最大10ターン
 - 回答が長い・自分から展開している場合は延長してよい
+- 回答が短い・疲れていそうな場合は深掘りを減らし、軽く進める
 - すべて埋まったら自然に締めに向かう
 
 【返答フォーマット】
 必ずJSON形式のみで返す。前置きや説明は不要。
 {"text": "AIの返答テキスト", "checkpoints_filled": ["background"]}`;
+        }
 
         let conversationHistory = [];
         let sessionContext = { format: null, timing: null, mood: null };
         let checkpoints = CHECKPOINTS.map(c => ({ ...c }));
         let sessionLog = [];
         let usageSummary = { requests: 0, prompt: 0, output: 0, total: 0, costUsd: 0, costJpy: 0 };
+        let followUpTimer = null;
+        let isWaitingForUser = false;
+        let followUpStep = 0;
+        let lastTypingAt = 0;
+
+        const FOLLOW_UP_DELAYS_MS = [21000, 34000, 55000];
+        const FOLLOW_UP_TYPING_MS = 900;
+        const USER_TYPING_SETTLE_MS = 2500;
+        const FOLLOW_UP_MESSAGES = [
+            "一言だけでも大丈夫です。",
+            "思いつく範囲で大丈夫ですよ。",
+            "雑談っぽくでも大丈夫です。",
+            "うまくまとまってなくても大丈夫です。"
+        ];
 
         const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -576,6 +610,92 @@
             msgs.appendChild(div); scrollDown();
         }
         function removeTyping() { const t = document.getElementById("typing"); if (t) t.remove(); }
+
+        function clearFollowUpTimer() {
+            if (followUpTimer) {
+                clearTimeout(followUpTimer);
+                followUpTimer = null;
+            }
+        }
+
+        function resetFollowUpSequence() {
+            followUpStep = 0;
+        }
+
+        function isUserTyping() {
+            const input = document.getElementById("userInput");
+            if (!input) return false;
+            if (!input.value.trim()) return false;
+            return Date.now() - lastTypingAt < USER_TYPING_SETTLE_MS;
+        }
+
+        async function waitForUserTypingToSettle() {
+            while (isUserTyping()) {
+                await sleep(400);
+            }
+        }
+
+        async function postAiMessage(text, options = {}) {
+            await waitForUserTypingToSettle();
+            addMessage("ai", text);
+
+            if (options.logEvent) {
+                pushSessionEvent(options.logEvent);
+            }
+
+            if (options.usage) {
+                updateUsageStats(options.usage);
+            }
+
+            if (options.resetFollowUp) {
+                resetFollowUpSequence();
+            }
+
+            if (options.scheduleFollowUp) {
+                scheduleFollowUp();
+            }
+        }
+
+        async function postAiPrompt(text, choices, onSelect) {
+            await postAiMessage(text);
+            await sleep(400);
+            await waitForUserTypingToSettle();
+            showChoices(choices, onSelect);
+        }
+
+        function emitFollowUpMessage() {
+            if (!isWaitingForUser || allDone() || followUpStep >= FOLLOW_UP_DELAYS_MS.length) return;
+
+            const text = FOLLOW_UP_MESSAGES[Math.floor(Math.random() * FOLLOW_UP_MESSAGES.length)];
+            showTyping();
+            followUpTimer = setTimeout(() => {
+                removeTyping();
+                if (!isWaitingForUser || allDone()) return;
+                addMessage("ai", text);
+                pushSessionEvent({ role: "ai", text, type: "follow_up" });
+                followUpStep += 1;
+                scheduleFollowUp();
+            }, FOLLOW_UP_TYPING_MS);
+        }
+
+        function scheduleFollowUp() {
+            clearFollowUpTimer();
+            if (allDone() || followUpStep >= FOLLOW_UP_DELAYS_MS.length) return;
+
+            isWaitingForUser = true;
+            const delay = FOLLOW_UP_DELAYS_MS[followUpStep];
+            followUpTimer = setTimeout(() => {
+                const input = document.getElementById("userInput");
+                if (!isWaitingForUser || !input || allDone()) return;
+
+                if (input.value.trim()) {
+                    scheduleFollowUp();
+                    return;
+                }
+
+                emitFollowUpMessage();
+            }, delay);
+        }
 
         function showChoices(choices, onSelect) {
             const msgs = document.getElementById("messages");
@@ -684,7 +804,7 @@
                 },
                 body: JSON.stringify({
                     model: MODEL_NAME,
-                    systemPrompt: SYSTEM_PROMPT,
+                    systemPrompt: buildSystemPrompt(),
                     conversationHistory,
                     userText
                 })
@@ -730,6 +850,9 @@
         // --- 送信 ---
         async function sendUserMessage(text) {
             if (!text.trim()) return;
+            isWaitingForUser = false;
+            clearFollowUpTimer();
+            removeTyping();
             addMessage("user", text);
             pushSessionEvent({ role: "user", text });
             showTyping();
@@ -737,9 +860,12 @@
             try {
                 const result = await callGemini(text);
                 removeTyping();
-                addMessage("ai", result.text);
-                pushSessionEvent({ role: "ai", text: result.text, usage: result.usage });
-                updateUsageStats(result.usage);
+                await postAiMessage(result.text, {
+                    logEvent: { role: "ai", text: result.text, usage: result.usage },
+                    usage: result.usage,
+                    resetFollowUp: true,
+                    scheduleFollowUp: true
+                });
                 if (result.checkpoints_filled?.length) markCheckpoints(result.checkpoints_filled);
                 if (allDone()) setTimeout(endSession, 800);
             } catch (e) {
@@ -750,6 +876,9 @@
         }
 
         function endSession() {
+            isWaitingForUser = false;
+            clearFollowUpTimer();
+            resetFollowUpSequence();
             document.getElementById("inputArea").style.display = "none";
             document.getElementById("endedNote").style.display = "block";
             document.getElementById("logBtn").style.display = "inline-block";
@@ -763,39 +892,42 @@
             try {
                 const parsed = await callGemini(ctx);
                 removeTyping();
-                addMessage("ai", parsed.text);
-                pushSessionEvent({ role: "ai", text: parsed.text, usage: parsed.usage });
-                updateUsageStats(parsed.usage);
+                await postAiMessage(parsed.text, {
+                    logEvent: { role: "ai", text: parsed.text, usage: parsed.usage },
+                    usage: parsed.usage,
+                    resetFollowUp: true,
+                    scheduleFollowUp: true
+                });
             } catch (e) {
                 removeTyping();
-                addMessage("ai", "今日はどうでしたか？");
+                await postAiMessage("今日はどうでしたか？", {
+                    resetFollowUp: true,
+                    scheduleFollowUp: true
+                });
             }
         }
 
         // --- ボタン選択フェーズ ---
         async function runButtonPhase() {
             await sleep(500);
-            addMessage("ai", "今日はありがとうございました。少しだけ話聞かせてもらえますか？");
-            await sleep(400);
-            showChoices(
+            await postAiPrompt(
+                "今日はありがとうございました。少しだけ話聞かせてもらえますか？",
                 [{ label: "現地参加", value: "現地" }, { label: "オンライン参加", value: "オンライン" }],
                 async (c) => {
                     sessionContext.format = c.value;
                     addMessage("user", c.label);
                     pushSessionEvent({ role: "user", text: c.label, type: "button" });
                     await sleep(700);
-                    addMessage("ai", "そうなんですね。仕事終わりでした？");
-                    await sleep(400);
-                    showChoices(
+                    await postAiPrompt(
+                        "そうなんですね。仕事終わりでした？",
                         [{ label: "仕事終わり", value: "仕事終わり" }, { label: "休日", value: "休日" }, { label: "その他", value: "その他" }],
                         async (c2) => {
                             sessionContext.timing = c2.value;
                             addMessage("user", c2.label);
                             pushSessionEvent({ role: "user", text: c2.label, type: "button" });
                             await sleep(700);
-                            addMessage("ai", "今日のセミナー、全体的にどうでした？");
-                            await sleep(400);
-                            showChoices(
+                            await postAiPrompt(
+                                "今日のセミナー、全体的にどうでした？",
                                 [
                                     { label: "よかった", value: "よかった" },
                                     { label: "まあまあ", value: "まあまあ" },
@@ -851,6 +983,12 @@
         });
 
         document.getElementById("userInput").addEventListener("input", function () {
+            lastTypingAt = Date.now();
+            if (this.value.trim()) {
+                scheduleFollowUp();
+            } else {
+                scheduleFollowUp();
+            }
             this.style.height = "42px";
             this.style.height = Math.min(this.scrollHeight, 120) + "px";
         });

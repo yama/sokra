@@ -135,7 +135,7 @@ async function callGemini({ model, systemPrompt, conversationHistory, userText }
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
             systemInstruction: { parts: [{ text: String(systemPrompt || "") }] },
-            generationConfig: { maxOutputTokens: 1000 },
+            generationConfig: { maxOutputTokens: 280 },
             contents: toGeminiContents(conversationHistory, userText)
         })
     });
