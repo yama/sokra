@@ -13,7 +13,8 @@ for prompt_name in \
   commit-message \
   review-workflow \
   ai-doc-review \
-  ai-doc-edit
+  ai-doc-edit \
+  pr-create
 do
   rm -f "${TARGET_DIR}/${prompt_name}.prompt.md"
 done
@@ -77,5 +78,11 @@ write_prompt \
   "AI向け文書の改修と追従更新を行う" \
   "ai-doc-edit" \
   "AI向け文書を改修し、正本、参照先、関連スキルまで含めて整合が取れるように更新してください。"
+
+write_prompt \
+  "pr-create" \
+  "統一形式でプルリクエスト本文を作成する" \
+  "pr-create" \
+  "現在の差分とレビュー状況を確認し、統一形式のプルリクエスト本文を作成してください。"
 
 echo "Synced Copilot prompt files to ${TARGET_DIR}"

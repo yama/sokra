@@ -57,6 +57,14 @@ AI がコミットする前には、変更内容に応じたレビューを必�
 - `docs/commit-convention.md`
 - `docs/commit-prompt.md`
 
+## Pull Request Policy
+
+- AI がプルリクエストを作成する前には、変更内容に応じたレビューを完了していること
+- プルリクエスト本文は、差分に存在する事実だけを書く
+- 概要文は `.github/pull_request_template.md` の構成に従う
+- 目的、主な変更、確認内容、未解決事項を明確に分ける
+- 誇張した効果、未確認の動作、差分にない背景説明を本文へ混ぜない
+
 ## Delegated Docs
 
 このファイルには、全 AI に共通する原則だけを書く。
