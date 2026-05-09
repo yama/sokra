@@ -109,7 +109,15 @@ async function postAiMessage(text, options = {}) {
     addMessage("ai", text);
 
     if (options.logEvent) {
-        await pushSessionEvent(options.logEvent);
+        if (options.allowLogFailure) {
+            try {
+                await pushSessionEvent(options.logEvent);
+            } catch {
+                // エラー表示は別経路で行うので、終了処理までは継続する。
+            }
+        } else {
+            await pushSessionEvent(options.logEvent);
+        }
     }
 
     if (options.usage) {
@@ -235,6 +243,7 @@ function showChoices(choices, onSelect) {
             try {
                 await onSelect(c);
             } catch (e) {
+                wrap.querySelectorAll(".choice-btn").forEach(b => b.disabled = false);
                 addMessage("ai", "少し接続が不安定でした。もう一度選んでください。");
                 pushSessionEvent({ role: "system", type: "ui_action_error", message: e.message }).catch(() => { });
             }
@@ -424,13 +433,15 @@ async function sendUserMessage(text) {
         }).catch(() => { });
         await postAiMessage("処理が止まりました。ここでいったん終了します。", {
             logEvent: { role: "ai", text: "処理が止まりました。ここでいったん終了します。", type: "ui_failure_abort" },
+            allowLogFailure: true,
             addToHistory: true,
             resetFollowUp: true,
             scheduleFollowUp: false
         });
         setTimeout(endSession, 400);
+    } finally {
+        document.getElementById("sendBtn").disabled = false;
     }
-    document.getElementById("sendBtn").disabled = false;
 }
 
 function endSession() {
