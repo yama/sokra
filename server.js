@@ -123,10 +123,13 @@ function toGeminiContents(history, userText) {
     const items = Array.isArray(history) ? history.slice() : [];
     items.push({ role: "user", content: String(userText || "") });
 
-    return items.map(m => ({
-        role: m.role === "assistant" ? "model" : "user",
-        parts: [{ text: String(m.content || "") }]
-    }));
+    return items.map(m => {
+        const role = ["assistant", "ai", "model"].includes(m.role) ? "model" : "user";
+        return {
+            role,
+            parts: [{ text: String(m.content || m.text || "") }]
+        };
+    });
 }
 
 function extractCandidateText(candidate) {
@@ -138,7 +141,7 @@ function extractCandidateText(candidate) {
     return text;
 }
 
-async function callGemini({ model, systemPrompt, conversationHistory, userText }) {
+async function callGemini({ model, systemPrompt, conversationHistory, userText, responseMimeType }) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
         throw new Error("GEMINI_API_KEY is not set in .env");
@@ -146,17 +149,22 @@ async function callGemini({ model, systemPrompt, conversationHistory, userText }
     const modelName = model || "gemini-2.5-flash";
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
+    const generationConfig = {
+        maxOutputTokens: 512,
+        thinkingConfig: {
+            thinkingBudget: 0
+        }
+    };
+    if (responseMimeType) {
+        generationConfig.responseMimeType = responseMimeType;
+    }
+
     const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
             systemInstruction: { parts: [{ text: String(systemPrompt || "") }] },
-            generationConfig: {
-                maxOutputTokens: 512,
-                thinkingConfig: {
-                    thinkingBudget: 0
-                }
-            },
+            generationConfig,
             contents: toGeminiContents(conversationHistory, userText)
         })
     });
@@ -250,7 +258,8 @@ async function handleApi(req, res, url) {
                 model: body.model,
                 systemPrompt: body.systemPrompt,
                 conversationHistory: body.conversationHistory,
-                userText: body.userText
+                userText: body.userText,
+                responseMimeType: body.responseMimeType
             });
             return sendJson(res, 200, result);
         } catch (err) {
