@@ -302,7 +302,13 @@ function updateUsageStats() {
     if (logPersistenceError) {
         lines.push(`ログ保存エラー: ${logPersistenceError}`);
     }
-    el.innerHTML = lines.join("<br>");
+    el.replaceChildren(
+        ...lines.map(line => {
+            const row = document.createElement("div");
+            row.textContent = line;
+            return row;
+        })
+    );
 }
 
 function setLogPersistenceError(message) {
@@ -478,19 +484,19 @@ async function runButtonPhase() {
         "今日はありがとうございました。少しだけ話聞かせてもらえますか？",
         [{ label: "現地参加", value: "現地" }, { label: "オンライン参加", value: "オンライン" }],
         async (c) => {
+            await pushSessionEvent({ role: "user", text: c.label, type: "button" });
             sessionContext.format = c.value;
             lastUserMessage = c.label;
             addMessage("user", c.label);
-            await pushSessionEvent({ role: "user", text: c.label, type: "button" });
             await sleep(700);
             await postAiPrompt(
                 "そうなんですね。仕事終わりでした？",
                 [{ label: "仕事終わり", value: "仕事終わり" }, { label: "休日", value: "休日" }, { label: "その他", value: "その他" }],
                 async (c2) => {
+                    await pushSessionEvent({ role: "user", text: c2.label, type: "button" });
                     sessionContext.timing = c2.value;
                     lastUserMessage = c2.label;
                     addMessage("user", c2.label);
-                    await pushSessionEvent({ role: "user", text: c2.label, type: "button" });
                     await sleep(700);
                     await postAiPrompt(
                         "今日のセミナー、全体的にどうでした？",
@@ -501,10 +507,10 @@ async function runButtonPhase() {
                             { label: "よく分からなかった", value: "よく分からなかった" }
                         ],
                         async (c3) => {
+                            await pushSessionEvent({ role: "user", text: c3.label, type: "button" });
                             sessionContext.mood = c3.value;
                             lastUserMessage = c3.label;
                             addMessage("user", c3.label);
-                            await pushSessionEvent({ role: "user", text: c3.label, type: "button" });
                             markCheckpoints(["temperature"]);
                             await sleep(800);
                             await startChatPhase();
@@ -517,7 +523,13 @@ async function runButtonPhase() {
 }
 
 // --- イベント ---
+let isStartingSession = false;
+
 document.getElementById("startBtn").addEventListener("click", async () => {
+    if (isStartingSession) return;
+    const startBtn = document.getElementById("startBtn");
+    isStartingSession = true;
+    startBtn.disabled = true;
     try {
         MODEL_NAME = document.getElementById("modelSelect").value;
         clearUserResistance();
@@ -536,6 +548,11 @@ document.getElementById("startBtn").addEventListener("click", async () => {
     } catch (e) {
         document.getElementById("startError").textContent = e.message;
         document.getElementById("startError").style.display = "block";
+    } finally {
+        isStartingSession = false;
+        if (document.getElementById("startScreen").style.display !== "none") {
+            startBtn.disabled = false;
+        }
     }
 });
 

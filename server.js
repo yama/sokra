@@ -4,7 +4,6 @@ const fsp = require("fs/promises");
 const path = require("path");
 const crypto = require("crypto");
 
-const HOST = process.env.HOST || "127.0.0.1";
 const ROOT = __dirname;
 const SESSIONS_DIR = path.join(ROOT, "data", "sessions");
 const STATIC_FILES = new Map([
@@ -15,13 +14,6 @@ const STATIC_FILES = new Map([
     ["/app.js", { file: "app.js", type: "application/javascript; charset=utf-8" }],
     ["/README.md", { file: "README.md", type: "text/markdown; charset=utf-8" }]
 ]);
-const STATIC_CONTENT_TYPES = new Map([
-    [".html", "text/html; charset=utf-8"],
-    [".css", "text/css; charset=utf-8"],
-    [".js", "application/javascript; charset=utf-8"],
-    [".md", "text/markdown; charset=utf-8"]
-]);
-
 function loadEnvFile() {
     const envPath = path.join(ROOT, ".env");
     if (!fs.existsSync(envPath)) return;
@@ -48,6 +40,7 @@ function loadEnvFile() {
 
 loadEnvFile();
 
+const HOST = process.env.HOST || "127.0.0.1";
 const PORT = Number(process.env.PORT || 3000);
 
 async function ensureSessionsDir() {
@@ -282,26 +275,6 @@ function serveStatic(req, res, url) {
         sendText(res, 200, fs.readFileSync(filePath, "utf8"), staticFile.type);
         return true;
     }
-
-    const normalizedPath = path.posix.normalize(url.pathname);
-    if (normalizedPath.includes("..") || normalizedPath.endsWith("/")) {
-        return false;
-    }
-    const ext = path.extname(normalizedPath);
-    const contentType = STATIC_CONTENT_TYPES.get(ext);
-    if (!contentType) {
-        return false;
-    }
-    const relativePath = normalizedPath.replace(/^\/+/, "");
-    if (!relativePath) {
-        return false;
-    }
-    const filePath = path.join(ROOT, relativePath);
-    if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
-        return false;
-    }
-    sendText(res, 200, fs.readFileSync(filePath, "utf8"), contentType);
-    return true;
 
     return false;
 }
