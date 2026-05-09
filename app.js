@@ -1,13 +1,8 @@
 let MODEL_NAME = "gemini-2.5-flash";
 let SESSION_ID = null;
 const FLOW = window.SokraInterviewFlow;
-const CHECKPOINTS = FLOW.CHECKPOINTS;
-const VALID_CHECKPOINT_IDS = new Set(CHECKPOINTS.map(checkpoint => checkpoint.id));
-const CORE_CHECKPOINT_IDS = ["background", "temperature", "impression", "practical"];
-const BRIDGEABLE_CHECKPOINT_IDS = ["background"];
-const MAX_TURNS_WITHOUT_CHECKPOINT = 10;
-const DELAYED_CONTINUATION_MS = window.__SOKRA_DELAYED_CONTINUATION_MS__ || 8000;
-const IDLE_CLOSING_MS = window.__SOKRA_IDLE_CLOSING_MS__ || 15000;
+const VALID_CHECKPOINT_IDS = new Set(FLOW.CHECKPOINTS.map(cp => cp.id));
+const SILENCE_TIMER_MS = window.__SOKRA_SILENCE_MS__ || 8000;
 const GEMINI_REQUEST_TIMEOUT_MS = window.__SOKRA_GEMINI_TIMEOUT_MS__ || 30000;
 const SESSION_PHASES = {
     START: "start",
@@ -23,29 +18,20 @@ let sessionLog = [];
 let usageSummary = {
     requests: 0,
     retries: 0,
-    fallbacks: 0,
-    startFallbacks: 0,
-    chatFallbacks: 0,
     promptTokens: 0,
     outputTokens: 0,
     totalTokens: 0
 };
 let lastTypingAt = 0;
 let lastUserMessage = "";
-let userResists = false;
-let turnsSinceCheckpoint = 0;
-let bridgeAttemptCounts = {};
-let delayedContinuationTimer = null;
-let delayedContinuationToken = 0;
-let idleClosingTimer = null;
-let idleClosingToken = 0;
+let silenceTimer = null;
+let silenceToken = 0;
 let typingIndicator = null;
 let typingStartedAt = 0;
 let sessionPhase = SESSION_PHASES.START;
 let eventSeq = 0;
 let persistQueue = Promise.resolve();
 let logPersistenceError = "";
-let closingContext = null;
 let closingActionNode = null;
 
 const USER_TYPING_SETTLE_MS = 2500;
@@ -74,7 +60,6 @@ function addMessage(role, text) {
 
 function showTyping() {
     if (typingIndicator) return;
-
     const msgs = document.getElementById("messages");
     const div = document.createElement("div");
     div.className = "msg ai";
@@ -112,24 +97,12 @@ async function withTypingUntilMessage(task) {
     }
 }
 
-function clearUserResistance() {
-    userResists = false;
+function showComposer() {
+    document.getElementById("inputArea").style.display = "flex";
 }
 
-function clearDelayedContinuation() {
-    delayedContinuationToken += 1;
-    if (delayedContinuationTimer) {
-        clearTimeout(delayedContinuationTimer);
-        delayedContinuationTimer = null;
-    }
-}
-
-function clearIdleClosing() {
-    idleClosingToken += 1;
-    if (idleClosingTimer) {
-        clearTimeout(idleClosingTimer);
-        idleClosingTimer = null;
-    }
+function hideComposer() {
+    document.getElementById("inputArea").style.display = "none";
 }
 
 function isUserTyping() {
@@ -137,71 +110,6 @@ function isUserTyping() {
     if (!input) return false;
     if (!input.value.trim()) return false;
     return Date.now() - lastTypingAt < USER_TYPING_SETTLE_MS;
-}
-
-function isConversationActive() {
-    return sessionPhase === SESSION_PHASES.CHAT || sessionPhase === SESSION_PHASES.CLOSING;
-}
-
-function isClosingPhase() {
-    return sessionPhase === SESSION_PHASES.CLOSING;
-}
-
-function removeClosingAction() {
-    if (closingActionNode) {
-        closingActionNode.remove();
-        closingActionNode = null;
-    }
-}
-
-function renderClosingAction(text = "") {
-    removeClosingAction();
-    const msgs = document.getElementById("messages");
-    const row = document.createElement("div");
-    row.className = "msg ai closing-action";
-
-    const card = document.createElement("div");
-    card.className = "closing-card";
-
-    const note = document.createElement("div");
-    note.className = "closing-note";
-    note.textContent = text;
-
-    const btn = document.createElement("button");
-    btn.className = "finish-btn";
-    btn.type = "button";
-    btn.textContent = "会話を終了する";
-    btn.addEventListener("click", async () => {
-        await endSession({
-            reason: closingContext?.reason || "normal",
-            logEvent: {
-                role: "system",
-                type: "session_completed_by_user",
-                closing_reason: closingContext?.reason || "normal"
-            }
-        });
-    });
-
-    card.append(note, btn);
-    row.appendChild(card);
-    msgs.appendChild(row);
-    closingActionNode = row;
-    scrollDown();
-}
-
-function setEndedNote(text = "") {
-    const note = document.getElementById("endedNote");
-    if (!note) return;
-    note.textContent = text;
-    note.style.display = text ? "block" : "none";
-}
-
-function showComposer() {
-    document.getElementById("inputArea").style.display = "flex";
-}
-
-function hideComposer() {
-    document.getElementById("inputArea").style.display = "none";
 }
 
 async function waitForUserTypingToSettle() {
@@ -247,7 +155,8 @@ function showChoices(choices, onSelect) {
     wrap.className = "choices";
     choices.forEach(c => {
         const btn = document.createElement("button");
-        btn.className = "choice-btn"; btn.textContent = c.label;
+        btn.className = "choice-btn";
+        btn.textContent = c.label;
         btn.onclick = async () => {
             wrap.querySelectorAll(".choice-btn").forEach(b => b.disabled = true);
             try {
@@ -260,16 +169,17 @@ function showChoices(choices, onSelect) {
         };
         wrap.appendChild(btn);
     });
-    lastAI.appendChild(wrap); scrollDown();
+    lastAI.appendChild(wrap);
+    scrollDown();
 }
 
+// --- Checklist ---
 function updateChecklist() {
     const el = document.getElementById("checkItems");
     el.innerHTML = checkpoints.map(c =>
         `<div class="check-item ${c.done ? "done" : ""}">${c.label}</div>`
     ).join("");
 
-    // プログレスドット更新
     const dots = document.getElementById("progressDots");
     dots.innerHTML = checkpoints.map(c =>
         `<div class="progress-dot ${c.done ? "done" : ""}"></div>`
@@ -279,143 +189,142 @@ function updateChecklist() {
 function markCheckpoints(ids) {
     ids.forEach(id => {
         const cp = checkpoints.find(c => c.id === id);
-        if (cp && !cp.done) {
-            cp.done = true;
-        }
+        if (cp && !cp.done) cp.done = true;
     });
     updateChecklist();
 }
 
-function allDone() { return checkpoints.every(c => c.done); }
-
-function coreCheckpointsDone() {
-    return CORE_CHECKPOINT_IDS.every(id => checkpoints.some(checkpoint => checkpoint.id === id && checkpoint.done));
-}
-
-function missingBridgeableCheckpointIds() {
-    return BRIDGEABLE_CHECKPOINT_IDS.filter(id =>
-        checkpoints.some(checkpoint => checkpoint.id === id && !checkpoint.done)
-    );
-}
-
-function nextBridgeTarget() {
-    return missingBridgeableCheckpointIds().find(id => (bridgeAttemptCounts[id] || 0) < 1) || null;
-}
-
-function noteBridgeAttempt(id) {
-    if (!id) return;
-    bridgeAttemptCounts[id] = (bridgeAttemptCounts[id] || 0) + 1;
-}
-
-function checkpointLabel(id) {
-    return checkpoints.find(checkpoint => checkpoint.id === id)?.label || id;
-}
-
-function bridgeGuidanceFor(id) {
-    switch (id) {
-        case "background":
-            return [
-                "参加背景へ向かうときは、「参加背景を教えてください」「なぜ参加したんですか？」のようにダイレクトに聞かないでください。",
-                "今までの感想や実務の話の延長で、「もともとそのへん気になってたんですか？」「そういう話、来る前から少し関心あった感じでした？」のように軽く寄せてください。"
-            ].join("\n");
-        case "practical":
-            return "仕事や日常とのつながりへ向かうときは、便利さや使いどころを前提にしすぎず、「使う場面が浮かびました？」「普段だとどこで触れそうですかね」くらいの温度で寄せてください。";
-        case "impression":
-            return "印象に残った場面へ向かうときは、広すぎる質問に戻さず、今の話題の少し手前にある具体例や場面に寄せてください。";
-        default:
-            return "";
+// --- Silence timer ---
+function clearSilenceCheck() {
+    silenceToken++;
+    if (silenceTimer) {
+        clearTimeout(silenceTimer);
+        silenceTimer = null;
     }
 }
 
-function buildClosingText(reason) {
-    switch (reason) {
-        case "turn_limit":
-            return "このあたりで、だいたい雰囲気はつかめました。もし他に思い出したことがあれば、まだ気軽に書いてください。";
-        default:
-            return "いろいろ聞かせてもらって、だいたい雰囲気はつかめました。何か思い出したことがあれば、まだ気軽にどうぞ。";
+function scheduleSilenceCheck() {
+    clearSilenceCheck();
+    if (sessionPhase !== SESSION_PHASES.CHAT) return;
+    const token = silenceToken;
+    silenceTimer = setTimeout(() => {
+        silenceTimer = null;
+        handleSilenceTurn(token);
+    }, SILENCE_TIMER_MS);
+}
+
+async function handleSilenceTurn(token) {
+    if (token !== silenceToken || sessionPhase !== SESSION_PHASES.CHAT) return;
+    const input = document.getElementById("userInput");
+    if (input?.value.trim()) return;
+
+    const instructionText = "内部指示: ユーザーが沈黙中です。会話として十分な内容があれば is_done: true にしてください。";
+    try {
+        const turn = await withTypingUntilMessage(() => generateInterviewTurn(instructionText));
+        if (token !== silenceToken || sessionPhase !== SESSION_PHASES.CHAT) {
+            removeTyping();
+            return;
+        }
+        if (input?.value.trim()) {
+            removeTyping();
+            return;
+        }
+        pushSessionEvent({ role: "internal", text: instructionText, type: "silence_trigger" }).catch(() => { });
+        await postAiMessage(turn.text, {
+            logEvent: { role: "ai", text: turn.text, type: "silence_turn", is_done: turn.is_done }
+        });
+        if (turn.is_done) {
+            transitionToClosing();
+        } else {
+            scheduleSilenceCheck();
+        }
+    } catch (e) {
+        pushSessionEvent({ role: "system", type: "silence_turn_error", message: e.message }).catch(() => { });
     }
 }
 
-function detectClosingReason(turnLimitReached) {
-    if (turnLimitReached) return "turn_limit";
-    if (allDone()) return "all_done";
-    if (coreCheckpointsDone()) return "core_done";
-    return "llm_done";
-}
-
-function buildIdleClosingText(sourceType) {
-    switch (sourceType) {
-        case "delayed_continuation":
-            return "無理に思い出さなくて大丈夫です。ここでいったん区切りにしておくので、何かあればまだ気軽に書いてください。";
-        case "bridge_turn":
-            return "ここでは無理に広げなくて大丈夫です。いったんこのへんまでにしておくので、何かあればまだどうぞ。";
-        default:
-            return "このあたりでいったん十分そうですね。もし他にあれば、まだ気軽に書いてください。";
+// --- Closing ---
+function removeClosingAction() {
+    if (closingActionNode) {
+        closingActionNode.remove();
+        closingActionNode = null;
     }
 }
 
-function buildClosingHint(reason) {
-    switch (reason) {
-        case "turn_limit":
-            return "急がなくて大丈夫です。終わるときは下のボタンからどうぞ。";
-        default:
-            return "もう話すことがなければ、下のボタンで閉じられます。";
-    }
-}
+function renderClosingAction() {
+    removeClosingAction();
+    const msgs = document.getElementById("messages");
+    const row = document.createElement("div");
+    row.className = "msg ai closing-action";
 
-function buildClosingPhasePrompt() {
-    return "追加で思い出したことがあれば、短く受け止めてください。新しい話題は広げず、必要なら軽く相づちして終わりやすい空気を保ってください。checkpoints_filled は自然に拾えたものだけ、is_done は false にしてください。";
-}
+    const card = document.createElement("div");
+    card.className = "closing-card";
 
-function buildEndedNoteText(reason) {
-    switch (reason) {
-        case "turn_limit":
-            return "ありがとうございました。ここまでの話を受け取っておきます。";
-        case "user_end":
-            return "ありがとうございました。ここで会話を閉じました。";
-        case "meta_abort":
-            return "ここでいったん会話を閉じました。";
-        case "failure_abort":
-            return "処理を続けられなかったため、ここで会話を閉じました。";
-        default:
-            return "話してくれてありがとうございました。";
-    }
-}
+    const hint = document.createElement("div");
+    hint.className = "closing-note";
+    hint.textContent = "もう話すことがなければ、下のボタンで閉じられます。";
 
-function sanitizeCheckpointsFilled(filled, currentCheckpoints) {
-    if (!Array.isArray(filled)) return [];
-    const seen = new Set();
-    return filled.filter(id => {
-        if (typeof id !== "string") return false;
-        if (seen.has(id)) return false;
-        if (!VALID_CHECKPOINT_IDS.has(id)) return false;
-        if (!currentCheckpoints.some(cp => cp.id === id && !cp.done)) return false;
-        seen.add(id);
-        return true;
+    const btn = document.createElement("button");
+    btn.className = "finish-btn";
+    btn.type = "button";
+    btn.textContent = "会話を終了する";
+    btn.addEventListener("click", () => {
+        endSession({ logEvent: { role: "system", type: "session_completed_by_user" } });
     });
+
+    card.append(hint, btn);
+    row.appendChild(card);
+    msgs.appendChild(row);
+    closingActionNode = row;
+    scrollDown();
 }
 
+function transitionToClosing() {
+    clearSilenceCheck();
+    sessionPhase = SESSION_PHASES.CLOSING;
+    renderClosingAction();
+}
+
+function setEndedNote(text = "") {
+    const note = document.getElementById("endedNote");
+    if (!note) return;
+    note.textContent = text;
+    note.style.display = text ? "block" : "none";
+}
+
+async function endSession(options = {}) {
+    if (sessionPhase === SESSION_PHASES.ENDED) return;
+    sessionPhase = SESSION_PHASES.ENDED;
+    clearSilenceCheck();
+    removeTyping();
+    removeClosingAction();
+    hideComposer();
+    setEndedNote("話してくれてありがとうございました。");
+    document.getElementById("logBtn").style.display = "inline-block";
+    if (options.logEvent) {
+        try {
+            await pushSessionEvent(options.logEvent);
+        } catch {
+            // ログ失敗は usageStats に表示される。
+        }
+    }
+}
+
+// --- System prompt ---
 function formatSeminarContext() {
-    const entries = [
+    return [
         `参加形式: ${sessionContext.format || "未選択"}`,
         `参加タイミング: ${sessionContext.timing || "未選択"}`,
         `温度感: ${sessionContext.mood || "未選択"}`
-    ];
-    return entries.join("\n");
+    ].join("\n");
 }
 
 function buildSystemPrompt(retryReason = "", options = {}) {
     const retryInstruction = retryReason
         ? `\n## 直前の応答エラー\n前回の応答は ${retryReason} でした。今回は説明、前置き、コードフェンスを含めず、JSONオブジェクトだけを返してください。\n`
         : "";
-    const bridgeInstruction = options.bridgeTo
-        ? `\n## 終了前の橋渡し\n参加者への返答をすぐ終了にせず、未回収の論点「${checkpointLabel(options.bridgeTo)}」へ自然に寄る一言を返してください。\n次に渡される userText は参加者の発言ではなく内部指示です。\n今までの会話内容を踏まえて、その延長で話しやすそうな話題をひとつだけ差し出してください。\n${bridgeGuidanceFor(options.bridgeTo)}\ncheckpoints_filled は必ず [] にしてください。\nis_done は false にしてください。\n`
-        : "";
-    const continuationInstruction = options.continuation
-        ? `\n## 今回の追加発話\n参加者は直前のあなたの返答から8秒ほどリアクションしていません。\n次に渡される userText は参加者の発言ではなく内部指示です。\n直前のあなたの返答が相づちだけで止まっている場合、短く一言だけ続けてください。\n自然にできるなら、未回収の論点へ軽く橋をかけてください。\n新しい分析やまとめはせず、押し付けがましい質問にしないでください。\ncheckpoints_filled は必ず [] にしてください。\nis_done は false にしてください。\n`
-        : "";
-    const closingPhaseInstruction = options.closingPhase
-        ? `\n## 終了フェーズ\n参加者には、いつでも会話を閉じられるボタンが見えています。\n${buildClosingPhasePrompt()}\n`
+    const closingInstruction = options.inClosingPhase
+        ? `\n## 終了フェーズ\n参加者には終了ボタンが見えています。追加の発言があれば軽く受け止めてください。新しい話題は始めず、is_done は false にしてください。\n`
         : "";
 
     return `あなたは、セミナー参加者と雑談しながら感想を聞く聞き手です。
@@ -494,6 +403,33 @@ ${JSON.stringify(checkpoints, null, 2)}
 
 ---
 
+## 内部指示への対応
+
+userText が「内部指示:」で始まるメッセージは、参加者の発言ではなく運営からの指示です。
+指示に従って text と is_done を返してください。
+
+「内部指示: ユーザーが沈黙中」の場合:
+- 会話として十分な記録が取れていれば、自然な締めの一言を text に入れて is_done: true にしてください
+- まだ続けられる話題や流れがあれば、自然な一言を返して is_done: false にしてください
+- 無理に話を引き出そうとしないでください
+checkpoints_filled は必ず [] にしてください。
+
+---
+
+## 会話を終わらせるべき場面
+
+以下のいずれかに当てはまれば is_done: true にしてください。
+
+- 会話として十分な記録が取れた
+- 参加者が「もう終わりにしたい」「やめたい」「そうしてください」など終了の意思を示した
+- 「噛み合っていない」「意味が分からない」「変」などメタな発言があり会話の継続が難しい
+- 会話がこれ以上自然に続かないと判断した
+
+is_done: true のとき、text には終わりにふさわしい一言を入れてください（例：「今日はありがとうございました。」）。
+自然に拾えなかった論点を埋めるためだけに会話を続けないでください。
+
+---
+
 ## 返答フォーマット
 
 必ずJSONで返してください。それ以外のテキストは含めないでください。
@@ -505,18 +441,21 @@ ${JSON.stringify(checkpoints, null, 2)}
 }
 
 checkpoints_filled には、今回の参加者発言で拾えた論点のIDだけを入れてください。なければ [] にしてください。
+${closingInstruction}${retryInstruction}`;
+}
 
-is_done を true にするのは以下のいずれかの場合だけです。
-
-- 会話として十分な記録が取れた
-- 参加者が終わりたそうにしている
-- 会話がこれ以上続かないと判断した
-
-自然に拾えなかった論点を埋めるためだけに会話を続けないでください。
-${bridgeInstruction}
-${continuationInstruction}
-${closingPhaseInstruction}
-${retryInstruction}`;
+// --- Gemini API ---
+function sanitizeCheckpointsFilled(filled, currentCheckpoints) {
+    if (!Array.isArray(filled)) return [];
+    const seen = new Set();
+    return filled.filter(id => {
+        if (typeof id !== "string") return false;
+        if (seen.has(id)) return false;
+        if (!VALID_CHECKPOINT_IDS.has(id)) return false;
+        if (!currentCheckpoints.some(cp => cp.id === id && !cp.done)) return false;
+        seen.add(id);
+        return true;
+    });
 }
 
 function buildConversationHistory() {
@@ -526,10 +465,10 @@ function buildConversationHistory() {
         historyEvents.pop();
     }
     return historyEvents
-        .filter(event => (event.role === "user" || event.role === "ai") && typeof event.text === "string")
-        .map(event => ({
-            role: event.role === "ai" ? "assistant" : "user",
-            content: event.text
+        .filter(e => ["user", "ai", "internal"].includes(e.role) && typeof e.text === "string")
+        .map(e => ({
+            role: e.role === "ai" ? "assistant" : "user",
+            content: e.text
         }));
 }
 
@@ -538,12 +477,10 @@ function parseInterviewTurn(rawText) {
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
         throw new Error("response is not a JSON object");
     }
-
     const text = typeof parsed.text === "string" ? parsed.text.trim() : "";
     if (!text) {
         throw new Error("response.text is required");
     }
-
     return {
         text,
         checkpoints_filled: sanitizeCheckpointsFilled(parsed.checkpoints_filled, checkpoints),
@@ -575,8 +512,7 @@ async function requestGeminiInterviewTurn(userText, retryReason = "", options = 
                 systemPrompt: buildSystemPrompt(retryReason, options),
                 conversationHistory: buildConversationHistory(),
                 userText,
-                responseMimeType: "application/json",
-                checkpoints
+                responseMimeType: "application/json"
             })
         });
     } catch (e) {
@@ -627,159 +563,19 @@ async function generateInterviewTurn(userText, options = {}) {
     }
 }
 
-function shouldScheduleDelayedContinuation(text) {
-    const trimmed = String(text || "").trim();
-    if (!trimmed) return false;
-    return !/[?？]\s*$/.test(trimmed);
-}
-
-async function postDelayedContinuation(token) {
-    if (token !== delayedContinuationToken || sessionPhase !== SESSION_PHASES.CHAT || userResists) return;
-    if (allDone() || coreCheckpointsDone()) return;
-
-    const input = document.getElementById("userInput");
-    if (input?.value.trim()) return;
-
-    try {
-        const turn = await withTypingUntilMessage(() => generateInterviewTurn("内部指示: 参加者が8秒ほどリアクションしていません。直前の返答に自然な一言を続けてください。", {
-            continuation: true
-        }));
-        if (token !== delayedContinuationToken || sessionPhase !== SESSION_PHASES.CHAT) {
-            removeTyping();
-            return;
-        }
-        if (input?.value.trim()) {
-            removeTyping();
-            return;
-        }
-
-        await postAiMessage(turn.text, {
-            logEvent: {
-                role: "ai",
-                text: turn.text,
-                type: "delayed_continuation",
-                answered_checkpoints: [],
-                delay_ms: DELAYED_CONTINUATION_MS
-            }
-        });
-        scheduleIdleClosing("delayed_continuation");
-    } catch (e) {
-        pushSessionEvent({
-            role: "system",
-            type: "delayed_continuation_error",
-            message: e.message,
-            details: e.details || e.message
-        }).catch(() => { });
-    }
-}
-
-async function maybeBridgeBeforeEnding(turn, answeredCheckpointIds, turnLimitReached) {
-    if (allDone() || coreCheckpointsDone()) return false;
-    if (!turn.is_done && !turnLimitReached) return false;
-
-    const bridgeTarget = nextBridgeTarget();
-    if (!bridgeTarget) return false;
-
-    noteBridgeAttempt(bridgeTarget);
-    const bridgeTurn = await withTypingUntilMessage(() => generateInterviewTurn(
-        `内部指示: 会話を終える前に、未回収の「${checkpointLabel(bridgeTarget)}」へ自然に寄る一言を返してください。`,
-        { bridgeTo: bridgeTarget }
-    ));
-
-    await postAiMessage(bridgeTurn.text, {
-        logEvent: {
-            role: "ai",
-            text: bridgeTurn.text,
-            type: "bridge_turn",
-            bridge_target: bridgeTarget,
-            answered_checkpoints: answeredCheckpointIds,
-            is_done_signal: turn.is_done,
-            turn_limit_reached: turnLimitReached
-        }
-    });
-
-    scheduleIdleClosing("bridge_turn");
-    scheduleDelayedContinuation(bridgeTurn.text);
-    return true;
-}
-
-async function postIdleClosing(token, sourceType) {
-    if (token !== idleClosingToken || sessionPhase !== SESSION_PHASES.CHAT || userResists) return;
-    const input = document.getElementById("userInput");
-    if (input?.value.trim()) return;
-
-    try {
-        const closingText = buildIdleClosingText(sourceType);
-        await enterClosingPhase(closingText, {
-            type: "idle_closing_message",
-            closing_reason: "idle",
-            source_type: sourceType,
-            idle_ms: IDLE_CLOSING_MS
-        });
-    } catch (e) {
-        pushSessionEvent({
-            role: "system",
-            type: "idle_closing_error",
-            source_type: sourceType,
-            idle_ms: IDLE_CLOSING_MS,
-            message: e.message,
-            details: e.details || e.message
-        }).catch(() => { });
-    }
-}
-
-function scheduleIdleClosing(sourceType) {
-    clearIdleClosing();
-    if (sessionPhase !== SESSION_PHASES.CHAT || userResists) return;
-
-    const token = idleClosingToken;
-    idleClosingTimer = setTimeout(() => {
-        idleClosingTimer = null;
-        postIdleClosing(token, sourceType);
-    }, IDLE_CLOSING_MS);
-}
-
-function scheduleDelayedContinuation(text) {
-    clearDelayedContinuation();
-    if (sessionPhase !== SESSION_PHASES.CHAT || userResists || allDone() || coreCheckpointsDone()) return;
-    if (!shouldScheduleDelayedContinuation(text)) return;
-
-    const token = delayedContinuationToken;
-    delayedContinuationTimer = setTimeout(() => {
-        delayedContinuationTimer = null;
-        postDelayedContinuation(token);
-    }, DELAYED_CONTINUATION_MS);
-}
-
-async function enterClosingPhase(text, eventData = {}) {
-    clearDelayedContinuation();
-    clearIdleClosing();
-    closingContext = {
-        reason: eventData.closing_reason || closingContext?.reason || "normal",
-        sourceType: eventData.source_type || closingContext?.sourceType || ""
-    };
-    sessionPhase = SESSION_PHASES.CLOSING;
-    await postAiMessage(text, {
-        logEvent: {
-            role: "ai",
-            text,
-            ...eventData
-        }
-    });
-    renderClosingAction(buildClosingHint(closingContext.reason));
-}
-
+// --- Usage stats ---
 function formatInt(n) { return Number(n || 0).toLocaleString("ja-JP"); }
+
 function updateUsageStats() {
     const el = document.getElementById("usageStats");
     if (!el) return;
     el.classList.toggle("error", Boolean(logPersistenceError));
     const lines = [
-        "会話制御: LLM生成 + アプリ側検証",
+        "会話制御: Gemini 委任",
         `生成モデル: ${MODEL_NAME}`,
         `セッションID: ${SESSION_ID || "-"}`,
         `外部生成リクエスト: ${formatInt(usageSummary.requests)}回`,
-        `再試行: ${formatInt(usageSummary.retries)}回 / fallback: ${formatInt(usageSummary.fallbacks)}回（start ${formatInt(usageSummary.startFallbacks)} / chat ${formatInt(usageSummary.chatFallbacks)}）`,
+        `再試行: ${formatInt(usageSummary.retries)}回`,
         `トークン: prompt ${formatInt(usageSummary.promptTokens)} / output ${formatInt(usageSummary.outputTokens)} / total ${formatInt(usageSummary.totalTokens)}`
     ];
     if (logPersistenceError) {
@@ -799,6 +595,7 @@ function setLogPersistenceError(message) {
     updateUsageStats();
 }
 
+// --- Session persistence ---
 async function startServerSession() {
     const res = await fetch("/api/session/start", {
         method: "POST",
@@ -838,106 +635,45 @@ function pushSessionEvent(event) {
     });
 }
 
-// --- 送信 ---
+// --- Conversation ---
+function isConversationActive() {
+    return sessionPhase === SESSION_PHASES.CHAT || sessionPhase === SESSION_PHASES.CLOSING;
+}
+
 async function sendUserMessage(text) {
-    if (!text.trim()) return;
-    if (!isConversationActive()) return;
-    clearDelayedContinuation();
-    clearIdleClosing();
+    if (!text.trim() || !isConversationActive()) return;
+    clearSilenceCheck();
     lastUserMessage = text.trim();
-    const userSignal = FLOW.getUserSignal(lastUserMessage);
-    userResists = userSignal !== "none";
     addMessage("user", text);
     document.getElementById("sendBtn").disabled = true;
     try {
         await pushSessionEvent({ role: "user", text });
-        if (userSignal !== "none") {
-            const aiText = FLOW.buildResistanceResponse(userSignal);
-            if (userSignal === "end") {
-                await enterClosingPhase(aiText, {
-                    type: "closing_message",
-                    closing_reason: "user_end",
-                    signal: userSignal
-                });
-            } else {
-                await postAiMessage(aiText, {
-                    logEvent: { role: "ai", text: aiText, type: "resistance_guard", signal: userSignal }
-                });
-                await endSession({ reason: "user_end" });
-            }
-            document.getElementById("sendBtn").disabled = false;
-            return;
-        }
-
-        if (FLOW.isMetaConversationReply(lastUserMessage)) {
-            const closingText = FLOW.buildMetaConversationClosing();
-            await postAiMessage(closingText, {
-                logEvent: { role: "ai", text: closingText, type: "conversation_mismatch_guard" }
-            });
-            await endSession({ reason: "meta_abort" });
-            document.getElementById("sendBtn").disabled = false;
-            return;
-        }
-
-        const turn = await withTypingUntilMessage(() => generateInterviewTurn(
-            lastUserMessage,
-            isClosingPhase() ? { closingPhase: true } : {}
-        ));
+        const options = sessionPhase === SESSION_PHASES.CLOSING ? { inClosingPhase: true } : {};
+        const turn = await withTypingUntilMessage(() => generateInterviewTurn(lastUserMessage, options));
         if (!isConversationActive()) {
             removeTyping();
             return;
         }
-        const answeredCheckpointIds = turn.checkpoints_filled;
-        if (answeredCheckpointIds.length) {
-            markCheckpoints(answeredCheckpointIds);
-            turnsSinceCheckpoint = 0;
-        } else {
-            turnsSinceCheckpoint += 1;
-        }
-
-        const turnLimitReached = !isClosingPhase() && turnsSinceCheckpoint >= MAX_TURNS_WITHOUT_CHECKPOINT;
-        const shouldEnd = isClosingPhase() || allDone() || coreCheckpointsDone() || turn.is_done || turnLimitReached;
-        const closingReason = !shouldEnd
-            ? ""
-            : isClosingPhase()
-            ? (closingContext?.reason || "normal")
-            : detectClosingReason(turnLimitReached);
-        if (!isClosingPhase() && shouldEnd && await maybeBridgeBeforeEnding(turn, answeredCheckpointIds, turnLimitReached)) {
-            return;
-        }
-
-        const eventType = shouldEnd ? "closing_message" : "generated_turn";
-        const aiText = shouldEnd && !turn.is_done && !isClosingPhase()
-            ? buildClosingText(closingReason)
-            : turn.text;
-        if (shouldEnd) {
-            await enterClosingPhase(aiText, {
-                type: eventType,
-                answered_checkpoints: answeredCheckpointIds,
-                is_done_signal: turn.is_done,
-                turn_limit_reached: turnLimitReached,
-                closing_reason: closingReason
-            });
-        } else {
-            await postAiMessage(aiText, {
-                logEvent: {
-                    role: "ai",
-                    text: aiText,
-                    type: eventType,
-                    answered_checkpoints: answeredCheckpointIds,
-                    is_done_signal: turn.is_done,
-                    turn_limit_reached: turnLimitReached,
-                    closing_reason: shouldEnd ? closingReason : undefined
-                }
-            });
-            scheduleDelayedContinuation(turn.text);
+        markCheckpoints(turn.checkpoints_filled);
+        await postAiMessage(turn.text, {
+            logEvent: {
+                role: "ai",
+                text: turn.text,
+                type: "generated_turn",
+                answered_checkpoints: turn.checkpoints_filled,
+                is_done: turn.is_done
+            }
+        });
+        if (turn.is_done && sessionPhase === SESSION_PHASES.CHAT) {
+            transitionToClosing();
+        } else if (!turn.is_done) {
+            scheduleSilenceCheck();
         }
     } catch (e) {
         pushSessionEvent({
             role: "system",
             type: "ai_turn_error",
-            message: e.message,
-            details: e.details || e.message
+            message: e.message
         }).catch(() => { });
         await postAiMessage("処理が止まりました。ここでいったん終了します。", {
             logEvent: { role: "ai", text: "処理が止まりました。ここでいったん終了します。", type: "chat_failure_abort" },
@@ -949,48 +685,23 @@ async function sendUserMessage(text) {
     }
 }
 
-async function endSession(options = {}) {
-    if (sessionPhase === SESSION_PHASES.ENDED) return;
-    sessionPhase = SESSION_PHASES.ENDED;
-    closingContext = null;
-    removeTyping();
-    clearDelayedContinuation();
-    clearIdleClosing();
-    hideComposer();
-    removeClosingAction();
-    setEndedNote(buildEndedNoteText(options.reason));
-    document.getElementById("logBtn").style.display = "inline-block";
-    if (options.logEvent) {
-        try {
-            await pushSessionEvent(options.logEvent);
-        } catch {
-            // ログ失敗は usageStats に表示される。
-        }
-    }
-}
-
-// --- チャット開始 ---
+// --- Start ---
 async function startChatPhase() {
     showComposer();
     removeClosingAction();
     setEndedNote("");
     sessionPhase = SESSION_PHASES.CHAT;
-    clearDelayedContinuation();
-    clearIdleClosing();
-    clearUserResistance();
-    turnsSinceCheckpoint = 0;
-    bridgeAttemptCounts = {};
+    clearSilenceCheck();
+    lastUserMessage = "";
     const openingText = "今日はありがとうございました。印象に残っていることがあれば、そこから聞かせてください。";
     await postAiMessage(openingText, {
         logEvent: { role: "ai", text: openingText, type: "start_chat_opening" }
     });
 }
 
-// --- ボタン選択フェーズ ---
 async function runButtonPhase() {
     sessionPhase = SESSION_PHASES.BUTTONS;
     await sleep(500);
-    clearUserResistance();
     await postAiPrompt(
         "今日はありがとうございました。少しだけ話聞かせてもらえますか？",
         [{ label: "現地参加", value: "現地" }, { label: "オンライン参加", value: "オンライン" }],
@@ -1033,7 +744,7 @@ async function runButtonPhase() {
     );
 }
 
-// --- イベント ---
+// --- Events ---
 let isStartingSession = false;
 
 document.getElementById("startBtn").addEventListener("click", async () => {
@@ -1043,7 +754,6 @@ document.getElementById("startBtn").addEventListener("click", async () => {
     startBtn.disabled = true;
     try {
         MODEL_NAME = document.getElementById("modelSelect").value;
-        clearUserResistance();
         removeClosingAction();
         setEndedNote("");
         await startServerSession();
@@ -1055,7 +765,7 @@ document.getElementById("startBtn").addEventListener("click", async () => {
             role: "system",
             type: "session_started",
             model: MODEL_NAME,
-            generation_mode: "llm_interview_turn"
+            generation_mode: "gemini_driven"
         });
         await runButtonPhase();
     } catch (e) {
@@ -1082,8 +792,7 @@ document.getElementById("userInput").addEventListener("keydown", (e) => {
 document.getElementById("userInput").addEventListener("input", function () {
     lastTypingAt = Date.now();
     if (this.value.trim()) {
-        clearDelayedContinuation();
-        clearIdleClosing();
+        clearSilenceCheck();
     }
     this.style.height = "42px";
     this.style.height = Math.min(this.scrollHeight, 120) + "px";
@@ -1100,6 +809,9 @@ document.getElementById("logBtn").addEventListener("click", () => {
     };
     const blob = new Blob([JSON.stringify(log, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "interview_log.json"; a.click();
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "interview_log.json";
+    a.click();
     URL.revokeObjectURL(url);
 });
