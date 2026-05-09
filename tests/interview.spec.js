@@ -35,6 +35,11 @@ async function sendAndReadReply(page, text) {
     return await readLastAiText(page);
 }
 
+async function finishInterview(page) {
+    await page.getByRole("button", { name: "会話を終了する" }).click();
+    await expect(page.locator("#endedNote")).toBeVisible();
+}
+
 async function startInterview(page) {
     await page.goto("/");
     await page.getByRole("button", { name: "開始する" }).click();
@@ -170,7 +175,9 @@ test.describe("interview runtime", () => {
 
         reply = await sendAndReadReply(page, "社内で案内があったので来ました");
         expect(reply).toContain("終わりにしましょう");
-        await expect(page.locator("#endedNote")).toBeVisible();
+        await expect(page.locator(".closing-action")).toBeVisible();
+        await expect(page.locator("#endedNote")).toBeHidden();
+        await finishInterview(page);
 
         expect(geminiCalls).toHaveLength(3);
         expect(geminiCalls[0].responseMimeType).toBe("application/json");
@@ -185,6 +192,7 @@ test.describe("interview runtime", () => {
         const lastAiEvent = [...events].reverse().find(event => event.role === "ai");
         expect(lastAiEvent?.type).toBe("closing_message");
         expect(lastAiEvent?.answered_checkpoints).toEqual(["background"]);
+        expect(events.some(event => event.type === "session_completed_by_user")).toBe(true);
     });
 
     test("unknown and completed checkpoint ids from Gemini are ignored", async ({ page }) => {
@@ -369,8 +377,8 @@ test.describe("interview runtime", () => {
         await waitForAiTextChange(page, reply);
         reply = await readLastAiText(page);
         expect(reply).toContain("無理に思い出さなくて大丈夫");
-        expect(reply).toContain("終わりにしましょう");
-        await expect(page.locator("#endedNote")).toBeVisible();
+        await expect(page.locator(".closing-action")).toBeVisible();
+        await expect(page.locator("#endedNote")).toBeHidden();
 
         const { events } = await currentSession(page);
         const lastAiEvent = [...events].reverse().find(event => event.role === "ai");
@@ -387,7 +395,7 @@ test.describe("interview runtime", () => {
 
         reply = await sendAndReadReply(page, "社内で案内があったので来ました");
         expect(reply).toContain("終わりにしましょう");
-        await expect(page.locator("#endedNote")).toBeVisible();
+        await expect(page.locator(".closing-action")).toBeVisible();
 
         const { events } = await currentSession(page);
         const lastAiEvent = [...events].reverse().find(event => event.role === "ai");
@@ -428,7 +436,7 @@ test.describe("interview runtime", () => {
 
         reply = await sendAndReadReply(page, "社内で案内があったので来ました");
         expect(reply).toContain("終わりにしましょう");
-        await expect(page.locator("#endedNote")).toBeVisible();
+        await expect(page.locator(".closing-action")).toBeVisible();
 
         const { events } = await currentSession(page);
         const bridgeEvent = events.find(event => event.type === "bridge_turn");
@@ -457,9 +465,9 @@ test.describe("interview runtime", () => {
         await expect(page.locator("#endedNote")).toBeHidden();
 
         reply = await sendAndReadReply(page, "社内で案内があったので来ました");
-        expect(reply).toContain("終わりにしましょう");
+        expect(reply).toContain("だいたい雰囲気はつかめました");
         expect(reply).not.toContain("関わる部分");
-        await expect(page.locator("#endedNote")).toBeVisible();
+        await expect(page.locator(".closing-action")).toBeVisible();
 
         const { events } = await currentSession(page);
         const lastAiEvent = [...events].reverse().find(event => event.role === "ai");

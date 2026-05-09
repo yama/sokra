@@ -9,6 +9,13 @@ const MAX_TURNS_WITHOUT_CHECKPOINT = 10;
 const DELAYED_CONTINUATION_MS = window.__SOKRA_DELAYED_CONTINUATION_MS__ || 8000;
 const IDLE_CLOSING_MS = window.__SOKRA_IDLE_CLOSING_MS__ || 15000;
 const GEMINI_REQUEST_TIMEOUT_MS = window.__SOKRA_GEMINI_TIMEOUT_MS__ || 30000;
+const SESSION_PHASES = {
+    START: "start",
+    BUTTONS: "buttons",
+    CHAT: "chat",
+    CLOSING: "closing",
+    ENDED: "ended"
+};
 
 let sessionContext = { format: null, timing: null, mood: null };
 let checkpoints = FLOW.createCheckpoints();
@@ -34,10 +41,12 @@ let idleClosingTimer = null;
 let idleClosingToken = 0;
 let typingIndicator = null;
 let typingStartedAt = 0;
-let chatPhaseActive = false;
+let sessionPhase = SESSION_PHASES.START;
 let eventSeq = 0;
 let persistQueue = Promise.resolve();
 let logPersistenceError = "";
+let closingContext = null;
+let closingActionNode = null;
 
 const USER_TYPING_SETTLE_MS = 2500;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -128,6 +137,71 @@ function isUserTyping() {
     if (!input) return false;
     if (!input.value.trim()) return false;
     return Date.now() - lastTypingAt < USER_TYPING_SETTLE_MS;
+}
+
+function isConversationActive() {
+    return sessionPhase === SESSION_PHASES.CHAT || sessionPhase === SESSION_PHASES.CLOSING;
+}
+
+function isClosingPhase() {
+    return sessionPhase === SESSION_PHASES.CLOSING;
+}
+
+function removeClosingAction() {
+    if (closingActionNode) {
+        closingActionNode.remove();
+        closingActionNode = null;
+    }
+}
+
+function renderClosingAction(text = "") {
+    removeClosingAction();
+    const msgs = document.getElementById("messages");
+    const row = document.createElement("div");
+    row.className = "msg ai closing-action";
+
+    const card = document.createElement("div");
+    card.className = "closing-card";
+
+    const note = document.createElement("div");
+    note.className = "closing-note";
+    note.textContent = text;
+
+    const btn = document.createElement("button");
+    btn.className = "finish-btn";
+    btn.type = "button";
+    btn.textContent = "会話を終了する";
+    btn.addEventListener("click", async () => {
+        await endSession({
+            reason: closingContext?.reason || "normal",
+            logEvent: {
+                role: "system",
+                type: "session_completed_by_user",
+                closing_reason: closingContext?.reason || "normal"
+            }
+        });
+    });
+
+    card.append(note, btn);
+    row.appendChild(card);
+    msgs.appendChild(row);
+    closingActionNode = row;
+    scrollDown();
+}
+
+function setEndedNote(text = "") {
+    const note = document.getElementById("endedNote");
+    if (!note) return;
+    note.textContent = text;
+    note.style.display = text ? "block" : "none";
+}
+
+function showComposer() {
+    document.getElementById("inputArea").style.display = "flex";
+}
+
+function hideComposer() {
+    document.getElementById("inputArea").style.display = "none";
 }
 
 async function waitForUserTypingToSettle() {
@@ -256,9 +330,9 @@ function bridgeGuidanceFor(id) {
 function buildClosingText(reason) {
     switch (reason) {
         case "turn_limit":
-            return "このあたりで十分聞かせてもらえた気がします。今日はありがとうございました。";
+            return "このあたりで、だいたい雰囲気はつかめました。もし他に思い出したことがあれば、まだ気軽に書いてください。";
         default:
-            return "今日は聞かせてもらってありがとうございました。このあたりで終わりにしましょう。";
+            return "いろいろ聞かせてもらって、だいたい雰囲気はつかめました。何か思い出したことがあれば、まだ気軽にどうぞ。";
     }
 }
 
@@ -272,11 +346,39 @@ function detectClosingReason(turnLimitReached) {
 function buildIdleClosingText(sourceType) {
     switch (sourceType) {
         case "delayed_continuation":
-            return "無理に思い出さなくて大丈夫です。今日はこのあたりで終わりにしましょう。聞かせてもらってありがとうございました。";
+            return "無理に思い出さなくて大丈夫です。ここでいったん区切りにしておくので、何かあればまだ気軽に書いてください。";
         case "bridge_turn":
-            return "ここでは無理に広げなくて大丈夫です。今日はこのあたりで終わりにしましょう。";
+            return "ここでは無理に広げなくて大丈夫です。いったんこのへんまでにしておくので、何かあればまだどうぞ。";
         default:
-            return "このあたりで大丈夫そうですね。今日は聞かせてもらってありがとうございました。";
+            return "このあたりでいったん十分そうですね。もし他にあれば、まだ気軽に書いてください。";
+    }
+}
+
+function buildClosingHint(reason) {
+    switch (reason) {
+        case "turn_limit":
+            return "急がなくて大丈夫です。終わるときは下のボタンからどうぞ。";
+        default:
+            return "もう話すことがなければ、下のボタンで閉じられます。";
+    }
+}
+
+function buildClosingPhasePrompt() {
+    return "追加で思い出したことがあれば、短く受け止めてください。新しい話題は広げず、必要なら軽く相づちして終わりやすい空気を保ってください。checkpoints_filled は自然に拾えたものだけ、is_done は false にしてください。";
+}
+
+function buildEndedNoteText(reason) {
+    switch (reason) {
+        case "turn_limit":
+            return "ありがとうございました。ここまでの話を受け取っておきます。";
+        case "user_end":
+            return "ありがとうございました。ここで会話を閉じました。";
+        case "meta_abort":
+            return "ここでいったん会話を閉じました。";
+        case "failure_abort":
+            return "処理を続けられなかったため、ここで会話を閉じました。";
+        default:
+            return "話してくれてありがとうございました。";
     }
 }
 
@@ -311,6 +413,9 @@ function buildSystemPrompt(retryReason = "", options = {}) {
         : "";
     const continuationInstruction = options.continuation
         ? `\n## 今回の追加発話\n参加者は直前のあなたの返答から8秒ほどリアクションしていません。\n次に渡される userText は参加者の発言ではなく内部指示です。\n直前のあなたの返答が相づちだけで止まっている場合、短く一言だけ続けてください。\n自然にできるなら、未回収の論点へ軽く橋をかけてください。\n新しい分析やまとめはせず、押し付けがましい質問にしないでください。\ncheckpoints_filled は必ず [] にしてください。\nis_done は false にしてください。\n`
+        : "";
+    const closingPhaseInstruction = options.closingPhase
+        ? `\n## 終了フェーズ\n参加者には、いつでも会話を閉じられるボタンが見えています。\n${buildClosingPhasePrompt()}\n`
         : "";
 
     return `あなたは、セミナー参加者と雑談しながら感想を聞く聞き手です。
@@ -410,6 +515,7 @@ is_done を true にするのは以下のいずれかの場合だけです。
 自然に拾えなかった論点を埋めるためだけに会話を続けないでください。
 ${bridgeInstruction}
 ${continuationInstruction}
+${closingPhaseInstruction}
 ${retryInstruction}`;
 }
 
@@ -528,7 +634,7 @@ function shouldScheduleDelayedContinuation(text) {
 }
 
 async function postDelayedContinuation(token) {
-    if (token !== delayedContinuationToken || !chatPhaseActive || userResists) return;
+    if (token !== delayedContinuationToken || sessionPhase !== SESSION_PHASES.CHAT || userResists) return;
     if (allDone() || coreCheckpointsDone()) return;
 
     const input = document.getElementById("userInput");
@@ -538,7 +644,7 @@ async function postDelayedContinuation(token) {
         const turn = await withTypingUntilMessage(() => generateInterviewTurn("内部指示: 参加者が8秒ほどリアクションしていません。直前の返答に自然な一言を続けてください。", {
             continuation: true
         }));
-        if (token !== delayedContinuationToken || !chatPhaseActive) {
+        if (token !== delayedContinuationToken || sessionPhase !== SESSION_PHASES.CHAT) {
             removeTyping();
             return;
         }
@@ -598,26 +704,22 @@ async function maybeBridgeBeforeEnding(turn, answeredCheckpointIds, turnLimitRea
 }
 
 async function postIdleClosing(token, sourceType) {
-    if (token !== idleClosingToken || !chatPhaseActive || userResists) return;
+    if (token !== idleClosingToken || sessionPhase !== SESSION_PHASES.CHAT || userResists) return;
     const input = document.getElementById("userInput");
     if (input?.value.trim()) return;
 
     const closingText = buildIdleClosingText(sourceType);
-    await postAiMessage(closingText, {
-        logEvent: {
-            role: "ai",
-            text: closingText,
-            type: "idle_closing_message",
-            source_type: sourceType,
-            idle_ms: IDLE_CLOSING_MS
-        }
+    await enterClosingPhase(closingText, {
+        type: "idle_closing_message",
+        closing_reason: "idle",
+        source_type: sourceType,
+        idle_ms: IDLE_CLOSING_MS
     });
-    setTimeout(endSession, 500);
 }
 
 function scheduleIdleClosing(sourceType) {
     clearIdleClosing();
-    if (!chatPhaseActive || userResists) return;
+    if (sessionPhase !== SESSION_PHASES.CHAT || userResists) return;
 
     const token = idleClosingToken;
     idleClosingTimer = setTimeout(() => {
@@ -628,7 +730,7 @@ function scheduleIdleClosing(sourceType) {
 
 function scheduleDelayedContinuation(text) {
     clearDelayedContinuation();
-    if (!chatPhaseActive || userResists || allDone() || coreCheckpointsDone()) return;
+    if (sessionPhase !== SESSION_PHASES.CHAT || userResists || allDone() || coreCheckpointsDone()) return;
     if (!shouldScheduleDelayedContinuation(text)) return;
 
     const token = delayedContinuationToken;
@@ -636,6 +738,24 @@ function scheduleDelayedContinuation(text) {
         delayedContinuationTimer = null;
         postDelayedContinuation(token);
     }, DELAYED_CONTINUATION_MS);
+}
+
+async function enterClosingPhase(text, eventData = {}) {
+    clearDelayedContinuation();
+    clearIdleClosing();
+    closingContext = {
+        reason: eventData.closing_reason || closingContext?.reason || "normal",
+        sourceType: eventData.source_type || closingContext?.sourceType || ""
+    };
+    sessionPhase = SESSION_PHASES.CLOSING;
+    await postAiMessage(text, {
+        logEvent: {
+            role: "ai",
+            text,
+            ...eventData
+        }
+    });
+    renderClosingAction(buildClosingHint(closingContext.reason));
 }
 
 function formatInt(n) { return Number(n || 0).toLocaleString("ja-JP"); }
@@ -710,6 +830,7 @@ function pushSessionEvent(event) {
 // --- 送信 ---
 async function sendUserMessage(text) {
     if (!text.trim()) return;
+    if (!isConversationActive()) return;
     clearDelayedContinuation();
     clearIdleClosing();
     lastUserMessage = text.trim();
@@ -721,10 +842,18 @@ async function sendUserMessage(text) {
         await pushSessionEvent({ role: "user", text });
         if (userSignal !== "none") {
             const aiText = FLOW.buildResistanceResponse(userSignal);
-            await postAiMessage(aiText, {
-                logEvent: { role: "ai", text: aiText, type: "resistance_guard", signal: userSignal }
-            });
-            setTimeout(endSession, 400);
+            if (userSignal === "end") {
+                await enterClosingPhase(aiText, {
+                    type: "closing_message",
+                    closing_reason: "user_end",
+                    signal: userSignal
+                });
+            } else {
+                await postAiMessage(aiText, {
+                    logEvent: { role: "ai", text: aiText, type: "resistance_guard", signal: userSignal }
+                });
+                await endSession({ reason: "user_end" });
+            }
             document.getElementById("sendBtn").disabled = false;
             return;
         }
@@ -734,12 +863,15 @@ async function sendUserMessage(text) {
             await postAiMessage(closingText, {
                 logEvent: { role: "ai", text: closingText, type: "conversation_mismatch_guard" }
             });
-            setTimeout(endSession, 400);
+            await endSession({ reason: "meta_abort" });
             document.getElementById("sendBtn").disabled = false;
             return;
         }
 
-        const turn = await withTypingUntilMessage(() => generateInterviewTurn(lastUserMessage));
+        const turn = await withTypingUntilMessage(() => generateInterviewTurn(
+            lastUserMessage,
+            isClosingPhase() ? { closingPhase: true } : {}
+        ));
         const answeredCheckpointIds = turn.checkpoints_filled;
         if (answeredCheckpointIds.length) {
             markCheckpoints(answeredCheckpointIds);
@@ -748,33 +880,41 @@ async function sendUserMessage(text) {
             turnsSinceCheckpoint += 1;
         }
 
-        const turnLimitReached = turnsSinceCheckpoint >= MAX_TURNS_WITHOUT_CHECKPOINT;
-        const shouldEnd = allDone() || coreCheckpointsDone() || turn.is_done || turnLimitReached;
-        const closingReason = shouldEnd ? detectClosingReason(turnLimitReached) : "";
-        if (shouldEnd && await maybeBridgeBeforeEnding(turn, answeredCheckpointIds, turnLimitReached)) {
+        const turnLimitReached = !isClosingPhase() && turnsSinceCheckpoint >= MAX_TURNS_WITHOUT_CHECKPOINT;
+        const shouldEnd = isClosingPhase() || allDone() || coreCheckpointsDone() || turn.is_done || turnLimitReached;
+        const closingReason = !shouldEnd
+            ? ""
+            : isClosingPhase()
+            ? (closingContext?.reason || "normal")
+            : detectClosingReason(turnLimitReached);
+        if (!isClosingPhase() && shouldEnd && await maybeBridgeBeforeEnding(turn, answeredCheckpointIds, turnLimitReached)) {
             return;
         }
 
         const eventType = shouldEnd ? "closing_message" : "generated_turn";
-        const aiText = shouldEnd && !turn.is_done
+        const aiText = shouldEnd && !turn.is_done && !isClosingPhase()
             ? buildClosingText(closingReason)
             : turn.text;
-
-        await postAiMessage(aiText, {
-            logEvent: {
-                role: "ai",
-                text: aiText,
+        if (shouldEnd) {
+            await enterClosingPhase(aiText, {
                 type: eventType,
                 answered_checkpoints: answeredCheckpointIds,
                 is_done_signal: turn.is_done,
                 turn_limit_reached: turnLimitReached,
-                closing_reason: shouldEnd ? closingReason : undefined
-            }
-        });
-
-        if (shouldEnd) {
-            setTimeout(endSession, 500);
+                closing_reason: closingReason
+            });
         } else {
+            await postAiMessage(aiText, {
+                logEvent: {
+                    role: "ai",
+                    text: aiText,
+                    type: eventType,
+                    answered_checkpoints: answeredCheckpointIds,
+                    is_done_signal: turn.is_done,
+                    turn_limit_reached: turnLimitReached,
+                    closing_reason: shouldEnd ? closingReason : undefined
+                }
+            });
             scheduleDelayedContinuation(turn.text);
         }
     } catch (e) {
@@ -788,26 +928,38 @@ async function sendUserMessage(text) {
             logEvent: { role: "ai", text: "処理が止まりました。ここでいったん終了します。", type: "chat_failure_abort" },
             allowLogFailure: true
         });
-        setTimeout(endSession, 400);
+        await endSession({ reason: "failure_abort" });
     } finally {
         document.getElementById("sendBtn").disabled = false;
     }
 }
 
-function endSession() {
-    chatPhaseActive = false;
+async function endSession(options = {}) {
+    if (sessionPhase === SESSION_PHASES.ENDED) return;
+    sessionPhase = SESSION_PHASES.ENDED;
+    closingContext = null;
     removeTyping();
     clearDelayedContinuation();
     clearIdleClosing();
-    document.getElementById("inputArea").style.display = "none";
-    document.getElementById("endedNote").style.display = "block";
+    hideComposer();
+    removeClosingAction();
+    setEndedNote(buildEndedNoteText(options.reason));
     document.getElementById("logBtn").style.display = "inline-block";
+    if (options.logEvent) {
+        try {
+            await pushSessionEvent(options.logEvent);
+        } catch {
+            // ログ失敗は usageStats に表示される。
+        }
+    }
 }
 
 // --- チャット開始 ---
 async function startChatPhase() {
-    document.getElementById("inputArea").style.display = "flex";
-    chatPhaseActive = true;
+    showComposer();
+    removeClosingAction();
+    setEndedNote("");
+    sessionPhase = SESSION_PHASES.CHAT;
     clearDelayedContinuation();
     clearIdleClosing();
     clearUserResistance();
@@ -821,6 +973,7 @@ async function startChatPhase() {
 
 // --- ボタン選択フェーズ ---
 async function runButtonPhase() {
+    sessionPhase = SESSION_PHASES.BUTTONS;
     await sleep(500);
     clearUserResistance();
     await postAiPrompt(
@@ -876,6 +1029,8 @@ document.getElementById("startBtn").addEventListener("click", async () => {
     try {
         MODEL_NAME = document.getElementById("modelSelect").value;
         clearUserResistance();
+        removeClosingAction();
+        setEndedNote("");
         await startServerSession();
         document.getElementById("startScreen").style.display = "none";
         document.getElementById("mainScreen").style.display = "flex";
