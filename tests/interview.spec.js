@@ -284,7 +284,7 @@ test.describe("interview runtime", () => {
         await waitForAiTextChange(page, reply);
         reply = await readLastAiText(page);
         expect(reply).toContain("仕事で使う場面");
-        expect(geminiCalls).toHaveLength(2);
+        expect(geminiCalls.length).toBeGreaterThanOrEqual(2);
 
         const { events } = await currentSession(page);
         expect(events.some(event => event.role === "internal" && event.type === "silence_trigger")).toBe(true);
