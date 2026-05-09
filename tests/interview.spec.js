@@ -327,6 +327,81 @@ test.describe("interview runtime", () => {
         expect(silenceTurn?.is_done).toBe(true);
     });
 
+    test("Gemini failure during silence turn reschedules the silence check", async ({ page }) => {
+        await page.addInitScript(() => {
+            window.__SOKRA_SILENCE_MS__ = 500;
+        });
+        let callCount = 0;
+        await page.route("**/api/gemini", async route => {
+            callCount++;
+            if (callCount === 1) {
+                await route.fulfill({
+                    status: 200,
+                    contentType: "application/json",
+                    body: JSON.stringify({
+                        text: JSON.stringify({ text: "へえー、面白いですね。", checkpoints_filled: [], is_done: false }),
+                        usage: { promptTokenCount: 10, outputTokenCount: 5, totalTokenCount: 15 },
+                        finishReason: "STOP", modelVersion: "mock"
+                    })
+                });
+            } else if (callCount <= 3) {
+                await route.fulfill({
+                    status: 500,
+                    contentType: "application/json",
+                    body: JSON.stringify({ error: "Gemini temporarily unavailable" })
+                });
+            } else {
+                await route.fulfill({
+                    status: 200,
+                    contentType: "application/json",
+                    body: JSON.stringify({
+                        text: JSON.stringify({ text: "今日はありがとうございました。", checkpoints_filled: [], is_done: true }),
+                        usage: { promptTokenCount: 10, outputTokenCount: 5, totalTokenCount: 15 },
+                        finishReason: "STOP", modelVersion: "mock"
+                    })
+                });
+            }
+        });
+        await startInterview(page);
+
+        const reply = await sendAndReadReply(page, "面白かったです");
+        await waitForAiTextChange(page, reply);
+        await expect(page.locator(".closing-action")).toBeVisible();
+        expect(callCount).toBeGreaterThanOrEqual(4);
+
+        const { events } = await currentSession(page);
+        expect(events.some(event => event.type === "silence_turn_error")).toBe(true);
+        expect(events.some(event => event.type === "silence_turn" && event.is_done === true)).toBe(true);
+    });
+
+    test("clearing the composer input reschedules the silence timer", async ({ page }) => {
+        await page.addInitScript(() => {
+            window.__SOKRA_SILENCE_MS__ = 500;
+        });
+        const geminiCalls = await mockGemini(page, (body, callCount) => {
+            if (callCount === 1) {
+                return { text: "そうなんですね。", checkpoints_filled: [], is_done: false };
+            }
+            expect(body.userText).toContain("内部指示");
+            return { text: "今日はありがとうございました。", checkpoints_filled: [], is_done: true };
+        });
+        await startInterview(page);
+
+        const reply = await sendAndReadReply(page, "少し難しかったです");
+        expect(reply).toContain("そうなんですね");
+
+        const input = page.locator("#userInput");
+        await input.fill("draft text");
+        await input.fill("");
+
+        await waitForAiTextChange(page, reply);
+        await expect(page.locator(".closing-action")).toBeVisible();
+
+        expect(geminiCalls.length).toBeGreaterThanOrEqual(2);
+        const { events } = await currentSession(page);
+        expect(events.some(event => event.type === "silence_turn")).toBe(true);
+    });
+
     test("Gemini timeout retries once and then aborts the chat", async ({ page }) => {
         await page.addInitScript(() => {
             window.__SOKRA_GEMINI_TIMEOUT_MS__ = 100;

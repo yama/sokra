@@ -240,6 +240,7 @@ async function handleSilenceTurn(token) {
         }
     } catch (e) {
         pushSessionEvent({ role: "system", type: "silence_turn_error", message: e.message }).catch(() => { });
+        scheduleSilenceCheck();
     }
 }
 
@@ -679,7 +680,7 @@ async function sendUserMessage(text) {
             logEvent: { role: "ai", text: "処理が止まりました。ここでいったん終了します。", type: "chat_failure_abort" },
             allowLogFailure: true
         });
-        await endSession({ reason: "failure_abort" });
+        await endSession();
     } finally {
         document.getElementById("sendBtn").disabled = false;
     }
