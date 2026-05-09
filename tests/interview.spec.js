@@ -256,6 +256,9 @@ test.describe("interview runtime", () => {
     });
 
     test("specific interesting example gets a delayed bridge toward practical", async ({ page }) => {
+        await page.addInitScript(() => {
+            window.__SOKRA_DELAYED_CONTINUATION_MS__ = 100;
+        });
         const geminiCalls = await mockGemini(page, (body, callCount) => {
             if (callCount === 1) {
                 return {
@@ -285,6 +288,52 @@ test.describe("interview runtime", () => {
         reply = await readLastAiText(page);
         expect(reply).toContain("仕事で使う場面");
         expect(geminiCalls).toHaveLength(2);
+    });
+
+    test("Gemini timeout retries once and then aborts the chat", async ({ page }) => {
+        await page.addInitScript(() => {
+            window.__SOKRA_GEMINI_TIMEOUT_MS__ = 100;
+        });
+        let callCount = 0;
+        await page.route("**/api/gemini", async route => {
+            callCount += 1;
+            await new Promise(resolve => setTimeout(resolve, 300));
+            await route.fulfill({
+                status: 200,
+                contentType: "application/json",
+                body: JSON.stringify({
+                    text: JSON.stringify({
+                        text: "遅すぎる返答です",
+                        checkpoints_filled: [],
+                        is_done: false
+                    }),
+                    usage: {
+                        promptTokenCount: 10,
+                        outputTokenCount: 5,
+                        totalTokenCount: 15
+                    },
+                    finishReason: "STOP",
+                    modelVersion: "mock"
+                })
+            });
+        });
+        await startInterview(page);
+
+        const previousText = await readLastAiText(page);
+        await sendMessage(page, "資料整理のデモが印象に残りました");
+        await expect(page.locator("#typingIndicator .typing")).toBeVisible();
+        await waitForAiTextChange(page, previousText);
+
+        const reply = await readLastAiText(page);
+        expect(reply).toContain("処理が止まりました");
+        await expect(page.locator("#typingIndicator")).toHaveCount(0);
+        await expect(page.locator("#endedNote")).toBeVisible();
+        expect(callCount).toBe(2);
+
+        const { usageText, events } = await currentSession(page);
+        expect(usageText).toContain("再試行: 1回");
+        expect(events.some(event => event.type === "ai_turn_retry")).toBe(true);
+        expect(events.some(event => event.type === "chat_failure_abort")).toBe(true);
     });
 
     test("delayed continuation with no reply eventually closes the conversation", async ({ page }) => {

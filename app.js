@@ -8,6 +8,7 @@ const BRIDGEABLE_CHECKPOINT_IDS = ["background"];
 const MAX_TURNS_WITHOUT_CHECKPOINT = 10;
 const DELAYED_CONTINUATION_MS = window.__SOKRA_DELAYED_CONTINUATION_MS__ || 8000;
 const IDLE_CLOSING_MS = window.__SOKRA_IDLE_CLOSING_MS__ || 15000;
+const GEMINI_REQUEST_TIMEOUT_MS = window.__SOKRA_GEMINI_TIMEOUT_MS__ || 30000;
 
 let sessionContext = { format: null, timing: null, mood: null };
 let checkpoints = FLOW.createCheckpoints();
@@ -455,18 +456,31 @@ async function requestGeminiInterviewTurn(userText, retryReason = "", options = 
     usageSummary.requests += 1;
     updateUsageStats();
 
-    const res = await fetch("/api/gemini", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            model: MODEL_NAME,
-            systemPrompt: buildSystemPrompt(retryReason, options),
-            conversationHistory: buildConversationHistory(),
-            userText,
-            responseMimeType: "application/json",
-            checkpoints
-        })
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), GEMINI_REQUEST_TIMEOUT_MS);
+    let res;
+    try {
+        res = await fetch("/api/gemini", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            signal: controller.signal,
+            body: JSON.stringify({
+                model: MODEL_NAME,
+                systemPrompt: buildSystemPrompt(retryReason, options),
+                conversationHistory: buildConversationHistory(),
+                userText,
+                responseMimeType: "application/json",
+                checkpoints
+            })
+        });
+    } catch (e) {
+        if (e?.name === "AbortError") {
+            throw new Error(`Gemini API request timed out after ${GEMINI_REQUEST_TIMEOUT_MS}ms`);
+        }
+        throw e;
+    } finally {
+        clearTimeout(timeoutId);
+    }
 
     const bodyText = await res.text();
     let data = {};
@@ -486,8 +500,8 @@ async function requestGeminiInterviewTurn(userText, retryReason = "", options = 
 }
 
 async function generateInterviewTurn(userText, options = {}) {
-    const raw = await requestGeminiInterviewTurn(userText, "", options);
     try {
+        const raw = await requestGeminiInterviewTurn(userText, "", options);
         return parseInterviewTurn(raw);
     } catch (firstError) {
         usageSummary.retries += 1;
@@ -498,11 +512,11 @@ async function generateInterviewTurn(userText, options = {}) {
             reason: firstError.message
         }).catch(() => { });
 
-        const retryRaw = await requestGeminiInterviewTurn(userText, firstError.message, options);
         try {
+            const retryRaw = await requestGeminiInterviewTurn(userText, firstError.message, options);
             return parseInterviewTurn(retryRaw);
         } catch (secondError) {
-            throw new Error(`Gemini JSON response could not be parsed after retry: ${secondError.message}`);
+            throw new Error(`Gemini interview turn failed after retry: ${secondError.message}`);
         }
     }
 }
@@ -524,8 +538,14 @@ async function postDelayedContinuation(token) {
         const turn = await withTypingUntilMessage(() => generateInterviewTurn("内部指示: 参加者が8秒ほどリアクションしていません。直前の返答に自然な一言を続けてください。", {
             continuation: true
         }));
-        if (token !== delayedContinuationToken || !chatPhaseActive) return;
-        if (input?.value.trim()) return;
+        if (token !== delayedContinuationToken || !chatPhaseActive) {
+            removeTyping();
+            return;
+        }
+        if (input?.value.trim()) {
+            removeTyping();
+            return;
+        }
 
         await postAiMessage(turn.text, {
             logEvent: {
