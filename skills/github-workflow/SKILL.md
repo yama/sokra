@@ -84,6 +84,8 @@ GitHub にアクセスできない場合はその事実を明示し、ローカ�
 
 - PR 番号や URL の特定、トップレベル本文や概要確認は `gh pr view` やネイティブ連携でよい
 - thread-aware なレビュー確認は `gh api graphql` を優先し、`reviewThreads` を直接読む
+- インラインレビューコメントへ返信する場合は、GraphQL ではなく REST の review comment reply を使う
+  例: `gh api repos/{owner}/{repo}/pulls/{pull_number}/comments/{comment_id}/replies -f body='...'`
 
 ### 5. 証拠が十分な場合だけ行動する
 
