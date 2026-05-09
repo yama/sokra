@@ -4,9 +4,23 @@ const fsp = require("fs/promises");
 const path = require("path");
 const crypto = require("crypto");
 
-const HOST = "0.0.0.0";
+const HOST = process.env.HOST || "127.0.0.1";
 const ROOT = __dirname;
 const SESSIONS_DIR = path.join(ROOT, "data", "sessions");
+const STATIC_FILES = new Map([
+    ["/", { file: "index.html", type: "text/html; charset=utf-8" }],
+    ["/index.html", { file: "index.html", type: "text/html; charset=utf-8" }],
+    ["/styles.css", { file: "styles.css", type: "text/css; charset=utf-8" }],
+    ["/interview-flow.js", { file: "interview-flow.js", type: "application/javascript; charset=utf-8" }],
+    ["/app.js", { file: "app.js", type: "application/javascript; charset=utf-8" }],
+    ["/README.md", { file: "README.md", type: "text/markdown; charset=utf-8" }]
+]);
+const STATIC_CONTENT_TYPES = new Map([
+    [".html", "text/html; charset=utf-8"],
+    [".css", "text/css; charset=utf-8"],
+    [".js", "application/javascript; charset=utf-8"],
+    [".md", "text/markdown; charset=utf-8"]
+]);
 
 function loadEnvFile() {
     const envPath = path.join(ROOT, ".env");
@@ -122,6 +136,15 @@ function toGeminiContents(history, userText) {
     }));
 }
 
+function extractCandidateText(candidate) {
+    const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [];
+    const text = parts
+        .map(part => typeof part?.text === "string" ? part.text : "")
+        .join("")
+        .trim();
+    return text;
+}
+
 async function callGemini({ model, systemPrompt, conversationHistory, userText }) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -135,7 +158,12 @@ async function callGemini({ model, systemPrompt, conversationHistory, userText }
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
             systemInstruction: { parts: [{ text: String(systemPrompt || "") }] },
-            generationConfig: { maxOutputTokens: 280 },
+            generationConfig: {
+                maxOutputTokens: 512,
+                thinkingConfig: {
+                    thinkingBudget: 0
+                }
+            },
             contents: toGeminiContents(conversationHistory, userText)
         })
     });
@@ -146,25 +174,35 @@ async function callGemini({ model, systemPrompt, conversationHistory, userText }
     }
 
     const data = await response.json();
-    const raw = data.candidates?.[0]?.content?.parts?.map(p => p.text).join("") || '{"text":"うん。","checkpoints_filled":[]}';
+    const candidate = data.candidates?.[0] || null;
+    const raw = extractCandidateText(candidate);
+    if (!raw) {
+        const finishReason = candidate?.finishReason || "";
+        const error = new Error(`Gemini response did not include any text candidate${finishReason ? ` (finishReason=${finishReason})` : ""}`);
+        error.code = "GEMINI_EMPTY_TEXT";
+        error.details = {
+            finishReason,
+            modelVersion: data.modelVersion || "",
+            candidateExcerpt: JSON.stringify(candidate || {}).slice(0, 1200)
+        };
+        throw error;
+    }
     const usage = data.usageMetadata || {};
 
     return {
-        raw,
+        text: raw,
         usage: {
             promptTokenCount: usage.promptTokenCount || 0,
             outputTokenCount: usage.candidatesTokenCount || usage.outputTokenCount || 0,
             totalTokenCount: usage.totalTokenCount || 0
-        }
+        },
+        finishReason: data.candidates?.[0]?.finishReason || "",
+        modelVersion: data.modelVersion || ""
     };
 }
 
 async function handleApi(req, res, url) {
     if (req.method === "POST" && url.pathname === "/api/session/start") {
-        if (!process.env.GEMINI_API_KEY) {
-            return sendJson(res, 500, { error: "サーバーにGEMINI_API_KEYが設定されていません。.envを確認してください。" });
-        }
-
         const bodyText = await readBody(req);
         const body = bodyText ? JSON.parse(bodyText) : {};
         const sessionId = makeSessionId();
@@ -214,13 +252,21 @@ async function handleApi(req, res, url) {
     if (req.method === "POST" && url.pathname === "/api/gemini") {
         const bodyText = await readBody(req);
         const body = bodyText ? JSON.parse(bodyText) : {};
-        const result = await callGemini({
-            model: body.model,
-            systemPrompt: body.systemPrompt,
-            conversationHistory: body.conversationHistory,
-            userText: body.userText
-        });
-        return sendJson(res, 200, result);
+        try {
+            const result = await callGemini({
+                model: body.model,
+                systemPrompt: body.systemPrompt,
+                conversationHistory: body.conversationHistory,
+                userText: body.userText
+            });
+            return sendJson(res, 200, result);
+        } catch (err) {
+            return sendJson(res, 502, {
+                error: err.message || "Gemini request failed",
+                code: err.code || "",
+                details: err.details || null
+            });
+        }
     }
 
     return false;
@@ -229,21 +275,33 @@ async function handleApi(req, res, url) {
 function serveStatic(req, res, url) {
     if (req.method !== "GET") return false;
 
-    if (url.pathname === "/" || url.pathname === "/index.html") {
-        const filePath = path.join(ROOT, "index.html");
-        const html = fs.readFileSync(filePath, "utf8");
-        sendText(res, 200, html, "text/html; charset=utf-8");
+    const staticFile = STATIC_FILES.get(url.pathname);
+    if (staticFile) {
+        const filePath = path.join(ROOT, staticFile.file);
+        if (!fs.existsSync(filePath)) return false;
+        sendText(res, 200, fs.readFileSync(filePath, "utf8"), staticFile.type);
         return true;
     }
 
-    if (url.pathname === "/README.md") {
-        const filePath = path.join(ROOT, "README.md");
-        if (fs.existsSync(filePath)) {
-            const md = fs.readFileSync(filePath, "utf8");
-            sendText(res, 200, md, "text/markdown; charset=utf-8");
-            return true;
-        }
+    const normalizedPath = path.posix.normalize(url.pathname);
+    if (normalizedPath.includes("..") || normalizedPath.endsWith("/")) {
+        return false;
     }
+    const ext = path.extname(normalizedPath);
+    const contentType = STATIC_CONTENT_TYPES.get(ext);
+    if (!contentType) {
+        return false;
+    }
+    const relativePath = normalizedPath.replace(/^\/+/, "");
+    if (!relativePath) {
+        return false;
+    }
+    const filePath = path.join(ROOT, relativePath);
+    if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+        return false;
+    }
+    sendText(res, 200, fs.readFileSync(filePath, "utf8"), contentType);
+    return true;
 
     return false;
 }
@@ -268,7 +326,7 @@ async function main() {
     });
 
     server.listen(PORT, HOST, () => {
-        console.log(`Server running at http://localhost:${PORT}`);
+        console.log(`Server running at http://${HOST}:${PORT}`);
         console.log(`Session logs directory: ${SESSIONS_DIR}`);
     });
 }

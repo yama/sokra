@@ -30,6 +30,7 @@ description: AGENTS.md、CLAUDE.md、.github/copilot-instructions.md、AI 向け
 - `AGENTS.md` は AI 向け運用ルールの正本である
 - 補助ファイルは、正本を複製せず参照する方向を優先する
 - フォールバックは本当に必要な場合に限り、問題隠しのために追加しない
+- フォールバックを追加する場合は、発火条件、観測方法、除去条件まで文書化する
 
 ## 手順
 
@@ -101,6 +102,7 @@ description: AGENTS.md、CLAUDE.md、.github/copilot-instructions.md、AI 向け
 - 接続不能を曖昧な代替手段で覆っていないか
 - 更新漏れを許容する逃げ道になっていないか
 - 正本の規律を崩す近道になっていないか
+- 常用経路化したフォールバックを「備え」と誤認する書き方になっていないか
 
 ### 8. 改修後に `ai-doc-review` 観点で自己レビューする
 
