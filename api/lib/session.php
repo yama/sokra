@@ -24,6 +24,10 @@ function make_session_id(): string
 function session_file_path(string $sessionId): string
 {
     $safe = preg_replace('/[^a-zA-Z0-9_-]/', '', $sessionId) ?? '';
+    if ($safe === '' || strlen($safe) < 8) {
+        throw new InvalidArgumentException(sprintf('Invalid session id: %s', $sessionId));
+    }
+
     return SESSIONS_DIR . '/' . $safe . '.jsonl';
 }
 

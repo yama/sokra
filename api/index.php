@@ -37,11 +37,11 @@ try {
         }
 
         $body = read_json_body();
-        if (!is_array($body) || !array_key_exists('event', $body) || !is_array($body['event'])) {
+        if (!array_key_exists('event', $body) || !is_array($body['event'])) {
             send_json(400, ['error' => 'event is required']);
         }
 
-        append_jsonl($filePath, $body['event'] + ['ts' => gmdate('c')]);
+        append_jsonl($filePath, array_merge($body['event'], ['ts' => gmdate('c')]));
         send_json(200, ['ok' => true]);
     }
 

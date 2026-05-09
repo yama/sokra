@@ -4,6 +4,17 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/http.php';
 
+final class GeminiResponseException extends RuntimeException
+{
+    public array $details;
+
+    public function __construct(string $message, array $details = [])
+    {
+        parent::__construct($message);
+        $this->details = $details;
+    }
+}
+
 function to_gemini_contents($history, $userText): array
 {
     $items = is_array($history) ? $history : [];
@@ -52,9 +63,8 @@ function call_gemini(array $params): array
 
     $modelName = (string) ($params['model'] ?: 'gemini-2.5-flash');
     $endpoint = sprintf(
-        'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s',
-        rawurlencode($modelName),
-        rawurlencode($apiKey)
+        'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent',
+        rawurlencode($modelName)
     );
 
     $generationConfig = [
@@ -65,16 +75,25 @@ function call_gemini(array $params): array
         $generationConfig['responseMimeType'] = (string) $params['responseMimeType'];
     }
 
-    $response = post_json($endpoint, [
-        'systemInstruction' => [
-            'parts' => [['text' => (string) ($params['systemPrompt'] ?? '')]],
-        ],
-        'generationConfig' => $generationConfig,
-        'contents' => to_gemini_contents($params['conversationHistory'] ?? [], $params['userText'] ?? ''),
-    ]);
+    try {
+        $response = post_json($endpoint, [
+            'systemInstruction' => [
+                'parts' => [['text' => (string) ($params['systemPrompt'] ?? '')]],
+            ],
+            'generationConfig' => $generationConfig,
+            'contents' => to_gemini_contents($params['conversationHistory'] ?? [], $params['userText'] ?? ''),
+        ], [
+            'x-goog-api-key: ' . $apiKey,
+        ]);
+    } catch (RuntimeException $e) {
+        throw new RuntimeException('Failed to connect to Gemini API', previous: $e);
+    }
 
     if ($response['status'] < 200 || $response['status'] >= 300) {
-        throw new RuntimeException(sprintf('Gemini API Error %d: %s', $response['status'], $response['body']));
+        throw new GeminiResponseException(
+            sprintf('Gemini API Error %d', $response['status']),
+            ['responseBody' => substr($response['body'], 0, 1200)]
+        );
     }
 
     $data = json_decode($response['body'], true);
@@ -86,16 +105,16 @@ function call_gemini(array $params): array
     $raw = extract_candidate_text(is_array($candidate) ? $candidate : null);
     if ($raw === '') {
         $finishReason = is_array($candidate) ? (string) ($candidate['finishReason'] ?? '') : '';
-        $error = new RuntimeException(
+        $error = new GeminiResponseException(
             $finishReason === ''
                 ? 'Gemini response did not include any text candidate'
-                : sprintf('Gemini response did not include any text candidate (finishReason=%s)', $finishReason)
+                : sprintf('Gemini response did not include any text candidate (finishReason=%s)', $finishReason),
+            [
+                'finishReason' => $finishReason,
+                'modelVersion' => (string) ($data['modelVersion'] ?? ''),
+                'candidateExcerpt' => substr(json_encode($candidate, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0, 1200),
+            ]
         );
-        $error->details = [
-            'finishReason' => $finishReason,
-            'modelVersion' => (string) ($data['modelVersion'] ?? ''),
-            'candidateExcerpt' => substr(json_encode($candidate, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0, 1200),
-        ];
         throw $error;
     }
 

@@ -27,7 +27,7 @@ function load_env(string $envPath): void
         $key = trim(substr($trimmed, 0, $index));
         $value = trim(substr($trimmed, $index + 1));
 
-        if ($value !== '' && (
+        if (strlen($value) >= 2 && (
             ($value[0] === '"' && str_ends_with($value, '"'))
             || ($value[0] === "'" && str_ends_with($value, "'"))
         )) {
