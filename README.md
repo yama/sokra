@@ -1,101 +1,135 @@
 # Sokra
 
-**Sokra** is an AI-powered conversational interview tool that draws out honest, unfiltered feedback through natural dialogue — not forms.
+**Sokra** は、自然な対話を通じて、率直なフィードバックを引き出す AI インタビューツールです。
 
-Inspired by the Socratic method (*maieutics*): the truth already exists within the person. Sokra's role is simply to help bring it out.
-
----
-
-## Use Cases
-
-- Post-seminar / event feedback
-- Daily standup alternative for engineers
-- Project retrospectives
-- 1on1 preparation
-- Any situation where written forms produce hollow answers
+ソクラテス式問答法（*maieutics*）に着想を得ています。真実はもともとその人の中にあり、Sokra の役割はそれを外に出しやすくすることです。
 
 ---
 
-## Concept
+## 想定ユースケース
 
-Traditional feedback forms tend to:
-
-- Reflect the question-asker's assumptions
-- Invite "correct-sounding" answers
-- Bore respondents
-- Favor articulate writers
-
-Sokra instead acts as **a good listener** — reducing friction, allowing small talk, never pushing for structured answers.
-
-> The goal is not to generate useful feedback. The goal is to collect honest words.
+- セミナーやイベント後の感想収集
+- エンジニア向けのデイリースタンドアップ代替
+- プロジェクトのふりかえり
+- 1on1 の事前準備
+- 記述式フォームだと中身の薄い回答になりやすい場面全般
 
 ---
 
-## How It Works
+## コンセプト
 
-1. **Context setup** — The host configures seminar/event context in advance
-2. **Button phase** — A few quick tap-to-answer questions to warm up and collect basic context
-3. **Free conversation** — Natural dialogue, AI-driven, with hidden checkpoints
-4. **Log export** — Raw conversation saved as JSON for later analysis (e.g. NotebookLM)
+従来のフィードバックフォームは、次のような傾向を持ちがちです。
 
-### Hidden Checkpoints
+- 質問する側の前提や期待を反映してしまう
+- 「正しそうな答え」を書かせやすい
+- 回答者を退屈させやすい
+- 文章化が得意な人ほど有利になる
 
-Sokra maintains an internal checklist of topics to cover — invisible to the respondent. Like improv comedy where performers must weave in 5 given keywords naturally, Sokra works these into conversation without ever revealing the structure.
+Sokra は代わりに、**感じのよい聞き手**として振る舞います。摩擦を減らし、雑談を許容し、構造化された答えを無理に求めません。
 
-Default checkpoints:
-
-- Participation background
-- Overall impression / temperature
-- Memorable moment
-- Confusion or difficulty
-- Connection to real work / daily life
+> 目的は「役立つフィードバックを生成すること」ではありません。率直な言葉を集めることです。
 
 ---
 
-## AI Behavior Principles
+## 仕組み
 
-**Sokra does NOT:**
+1. **コンテキスト設定** — 主催者が事前にセミナーやイベントの前提情報を設定する
+2. **ボタンフェーズ** — 数問のタップ式質問でウォームアップしつつ、基本情報を集める
+3. **一問ずつの会話** — 直前の回答を受けて、次に自然な一問だけを出す
+4. **ログ保存** — 生の会話を JSON として保存し、後で NotebookLM などで分析できるようにする
 
-- Summarize or analyze in real-time
-- Push for positive framing
-- Make the respondent feel interviewed
-- Use phrases like "So what you're saying is..."
+### 隠れたチェックポイント
 
-**Sokra DOES:**
+Sokra は、会話の中で拾いたい論点を内部チェックリストとして持ちます。これは回答者には見えません。ただし、チェックポイントの順序は固定しません。直前の回答で自然に触れられた論点だけを記録し、次の一問は会話の流れに合わせて選びます。
 
-- Use short acknowledgements ("uh-huh", "I see")
-- Allow — even encourage — small talk and tangents
-- Vary response length and tempo (like a human)
-- Ask about *memory*, not *evaluation*
-- Accept "nothing in particular" as a valid answer
+デフォルトのチェックポイント:
 
----
+- 参加背景
+- 全体の印象や温度感
+- 記憶に残った場面
+- 違和感や難しさ
+- 実務や日常との接点
 
-## Tech Stack
-
-- **Frontend**: Vanilla HTML/CSS/JS (single file, no build step)
-- **Backend**: Node.js (`server.js`) for API proxy + local file logging
-- **AI**: Gemini API
-- **Log format**: JSONL (server-side append) + JSON export (client)
-- **Analysis**: Designed for NotebookLM or similar
+会話制御の基本は「今の一問に対する回答を受ける」ことです。未回収の論点を埋めるために、別の話題へ急に戻ることは避けます。
 
 ---
 
-## Setup
+## AI のふるまい原則
+
+**Sokra がしないこと**
+
+- その場で要約や分析をしない
+- 前向きな結論へ誘導しない
+- 「インタビューされている感」を強く出さない
+- 「つまりこういうことですね」のような分析的な言い換えをしない
+
+**Sokra がすること**
+
+- ラフな会話を演出するために、短い相づちをタイミングよく使う
+- 雑談や脱線を許容し、ときには促す
+- 返答の長さやテンポに揺らぎを持たせる
+- *評価* ではなく *記憶* を聞く
+- 「特にない」も有効な答えとして受け止める
+
+---
+
+## 技術構成
+
+- **フロントエンド**: 素の HTML/CSS/JS（`index.html`、`styles.css`、`app.js`、`interview-flow.js`。ビルド不要）
+- **バックエンド**: Node.js（`server.js`、API プロキシ兼ローカルファイルログ保存）
+- **AI**: Gemini API（生成補助や拡張用。通常のインタビュー進行はアプリ側の状態管理で安定化）
+- **ログ形式**: JSONL（サーバー側追記） + JSON エクスポート（クライアント側）
+- **分析**: NotebookLM などでの後分析を想定
+
+---
+
+## セットアップ
 
 ```bash
 git clone https://github.com/yourname/sokra.git
 cd sokra
 cp .env.example .env
-# .env の GEMINI_API_KEY を設定
+# GEMINI_API_KEY は通常のインタビュー動作には不要
+# /api/gemini を使う生成補助や拡張が必要な場合だけ設定
+# 通常のローカル開発では PORT=3000 のまま使う
+# 外部公開が必要な場合だけ HOST=0.0.0.0 に変更
 npm start
 ```
 
-Open `http://localhost:3000` in your browser. サーバーの `.env` に設定した Gemini API key が使用されます。
+ブラウザで `http://127.0.0.1:3000` を開いてください。デフォルトでは `HOST=127.0.0.1`、`PORT=3000` でローカルアクセス専用です。通常のインタビュー進行は外部生成 API に依存しません。
 
-Session logs are saved on the server under `data/sessions/*.jsonl`.
+`PORT=80` や `443` を直接使うのは、権限のある実行環境やリバースプロキシ配下を前提にしてください。通常のローカル開発では `3000` のまま使う想定です。
 
-## AI Commit Workflow (Copilot / Claude / Codex)
+セッションログはサーバー側の `data/sessions/*.jsonl` に保存されます。
+
+## ヘッドレス E2E 確認
+
+Playwright を使ったヘッドレスの UI 動作確認を用意しています。
+
+```bash
+npm run test:e2e
+```
+
+このテストは `http://127.0.0.1:3000` の画面を実際に開き、ボタンフェーズから自由会話、終了までを通します。終了時には `usageStats` と `data/sessions/*.jsonl` を照合し、`warning` や `chat_failure_abort` が出ていないことも確認します。
+
+テストは古いローカルサーバーを再利用せず、現行コードで起動し直します。すでに `3000` 番ポートを使っている開発サーバーがある場合は、停止してから実行してください。
+
+### `localhost` で CSS が 404 になるとき
+
+`http://localhost/` は `:80` を向くため、古い別プロセスが残っていると Sokra ではないサーバーに接続されます。開発・自走確認は `http://127.0.0.1:3000` を正として確認してください。
+
+```bash
+# 3000 側の Sokra 起動確認
+curl -I http://127.0.0.1:3000/styles.css
+
+# localhost(:80) 側を使っているプロセス確認
+curl -sv http://localhost/ -o /tmp/sokra_localhost_root.html 2>&1 | sed -n '1,20p'
+ps -ef | rg "node server.js|npm start"
+```
+
+古い `node server.js` が残っている場合は停止してから、`npm start` で起動し直してください。
+
+## AI コミット運用（Copilot / Claude / Codex）
 
 このリポジトリでは、コミットメッセージ生成ルールを共通化しています。
 
@@ -112,7 +146,7 @@ Session logs are saved on the server under `data/sessions/*.jsonl`.
 git config commit.template .gitmessage.txt
 ```
 
-## Shared Skills
+## 共用スキル
 
 共用スキルの正本は `skills/` 配下です。
 3系統をまとめて同期する場合は、次を使います。
@@ -141,20 +175,20 @@ GitHub Copilot で再利用プロンプトとして使う場合は、次で `.gi
 bash scripts/sync-copilot-prompts.sh
 ```
 
-Copilot で prompt files を使うには、IDE 側で `chat.promptFiles` を有効にする必要があります。
+Copilot でプロンプトファイルを使うには、IDE 側で `chat.promptFiles` を有効にする必要があります。
 
 ---
 
-## Roadmap
+## 今後の予定
 
-- [ ] Host configuration UI (seminar context, custom checkpoints)
-- [ ] Pre-interview flow for hosts
-- [ ] Multi-session log aggregation
-- [ ] Timing controls (send link after event, not immediately)
-- [ ] Generalize beyond seminars
+- [ ] 主催者向け設定 UI（セミナー文脈、カスタムチェックポイント）
+- [ ] 主催者向けの事前設定フロー
+- [ ] 複数セッションのログ集約
+- [ ] 配布タイミング制御（イベント直後ではなく後送するなど）
+- [ ] セミナー以外への一般化
 
 ---
 
-## License
+## ライセンス
 
 MIT

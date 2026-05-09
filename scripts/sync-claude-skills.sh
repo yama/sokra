@@ -13,6 +13,7 @@ if [[ ! -d "${SOURCE_DIR}" ]]; then
 fi
 
 mkdir -p "${TARGET_DIR}"
+find "${TARGET_DIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 
 for skill_dir in "${SOURCE_DIR}"/*; do
   [[ -d "${skill_dir}" ]] || continue
