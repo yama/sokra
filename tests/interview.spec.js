@@ -36,8 +36,13 @@ async function sendAndReadReply(page, text) {
 }
 
 async function finishInterview(page) {
+    const eventPersisted = page.waitForResponse(response =>
+        response.request().method() === "POST"
+        && /\/api\/session\/[^/]+\/event$/.test(response.url())
+    );
     await page.getByRole("button", { name: "会話を終了する" }).click();
     await expect(page.locator("#endedNote")).toBeVisible();
+    await eventPersisted;
 }
 
 async function startInterview(page) {

@@ -708,13 +708,24 @@ async function postIdleClosing(token, sourceType) {
     const input = document.getElementById("userInput");
     if (input?.value.trim()) return;
 
-    const closingText = buildIdleClosingText(sourceType);
-    await enterClosingPhase(closingText, {
-        type: "idle_closing_message",
-        closing_reason: "idle",
-        source_type: sourceType,
-        idle_ms: IDLE_CLOSING_MS
-    });
+    try {
+        const closingText = buildIdleClosingText(sourceType);
+        await enterClosingPhase(closingText, {
+            type: "idle_closing_message",
+            closing_reason: "idle",
+            source_type: sourceType,
+            idle_ms: IDLE_CLOSING_MS
+        });
+    } catch (e) {
+        pushSessionEvent({
+            role: "system",
+            type: "idle_closing_error",
+            source_type: sourceType,
+            idle_ms: IDLE_CLOSING_MS,
+            message: e.message,
+            details: e.details || e.message
+        }).catch(() => { });
+    }
 }
 
 function scheduleIdleClosing(sourceType) {
@@ -872,6 +883,10 @@ async function sendUserMessage(text) {
             lastUserMessage,
             isClosingPhase() ? { closingPhase: true } : {}
         ));
+        if (!isConversationActive()) {
+            removeTyping();
+            return;
+        }
         const answeredCheckpointIds = turn.checkpoints_filled;
         if (answeredCheckpointIds.length) {
             markCheckpoints(answeredCheckpointIds);
