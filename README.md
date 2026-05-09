@@ -79,7 +79,7 @@ Sokra は、会話の中で拾いたい論点を内部チェックリストと�
 ## 技術構成
 
 - **フロントエンド**: 素の HTML/CSS/JS（`index.html`、`styles.css`、`app.js`、`interview-flow.js`。ビルド不要）
-- **バックエンド**: Node.js（`server.js`、API プロキシ兼ローカルファイルログ保存）
+- **バックエンド**: PHP（`api/index.php`、Gemini API プロキシ兼ローカルファイルログ保存）
 - **AI**: Gemini API（自由会話の発話生成。チェックポイント検証と終了判定はアプリ側で実施）
 - **ログ形式**: JSONL（サーバー側追記） + JSON エクスポート（クライアント側）
 - **分析**: NotebookLM などでの後分析を想定
@@ -94,16 +94,26 @@ cd sokra
 cp .env.example .env
 # GEMINI_API_KEY は自由会話フェーズで使用
 # 通常のインタビューを動かす場合も設定
-# 通常のローカル開発では PORT=3000 のまま使う
-# 外部公開が必要な場合だけ HOST=0.0.0.0 に変更
 npm start
 ```
 
-ブラウザで `http://127.0.0.1:3000` を開いてください。デフォルトでは `HOST=127.0.0.1`、`PORT=3000` でローカルアクセス専用です。自由会話フェーズでは `/api/gemini` 経由で Gemini API を使います。
-
-`PORT=80` や `443` を直接使うのは、権限のある実行環境やリバースプロキシ配下を前提にしてください。通常のローカル開発では `3000` のまま使う想定です。
+`npm start` は内部で `php -S 127.0.0.1:3000 router.php` を起動します。ブラウザで `http://127.0.0.1:3000` を開いてください。自由会話フェーズでは `/api/gemini` 経由で Gemini API を使います。
 
 セッションログはサーバー側の `data/sessions/*.jsonl` に保存されます。
+
+## 公開時の構成
+
+レンタルサーバ向けの本番構成は、Apache + PHP を前提にしています。
+
+- `/api/...` は `api/.htaccess` で `api/index.php` にルーティング
+- `.env` は公開ディレクトリ内に置く前提だが、ルートの `.htaccess` で直アクセスを拒否
+- セッションログは `data/sessions/*.jsonl` に保存
+
+`.env` の例:
+
+```dotenv
+GEMINI_API_KEY=your_api_key
+```
 
 ## ヘッドレス E2E 確認
 
@@ -119,7 +129,7 @@ npm run test:e2e
 
 ### `localhost` で CSS が 404 になるとき
 
-`http://localhost/` は `:80` を向くため、古い別プロセスが残っていると Sokra ではないサーバーに接続されます。開発・自走確認は `http://127.0.0.1:3000` を正として確認してください。
+`http://localhost/` は `:80` を向くため、別の Apache や PHP アプリに接続されることがあります。開発・自走確認は `http://127.0.0.1:3000` を正として確認してください。
 
 ```bash
 # 3000 側の Sokra 起動確認
@@ -127,10 +137,10 @@ curl -I http://127.0.0.1:3000/styles.css
 
 # localhost(:80) 側を使っているプロセス確認
 curl -sv http://localhost/ -o /tmp/sokra_localhost_root.html 2>&1 | sed -n '1,20p'
-ps -ef | rg "node server.js|npm start"
+ps -ef | rg "php -S 127.0.0.1:3000|npm start"
 ```
 
-古い `node server.js` が残っている場合は停止してから、`npm start` で起動し直してください。
+古い `php -S 127.0.0.1:3000` が残っている場合は停止してから、`npm start` で起動し直してください。
 
 ## AI コミット運用（Copilot / Claude / Codex）
 

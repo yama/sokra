@@ -238,7 +238,7 @@ AIには必ずJSON形式で返答させる：
 `checkpoints_filled` にはその発言で回収できたチェックポイントのIDを列挙する。空の場合は `[]`。
 `is_done` は会話終了のシグナルとして扱い、最終的な終了判定はアプリ側で行う。
 自然に拾えなかった論点が残っていても、会話として十分な記録が取れた場合は終了してよい。
-現状は `server.js` の `callGemini` が `responseMimeType` は渡すが `responseSchema` は渡しておらず、`app.js` 側が寛容な JSON パースと未知キー無視で吸収する前提にしている。
+現状は `api/lib/gemini.php` の `call_gemini` が `responseMimeType` は渡すが `responseSchema` は渡しておらず、`app.js` 側が寛容な JSON パースと未知キー無視で吸収する前提にしている。
 
 ---
 
