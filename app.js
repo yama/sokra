@@ -697,6 +697,7 @@ async function startChatPhase() {
     await postAiMessage(openingText, {
         logEvent: { role: "ai", text: openingText, type: "start_chat_opening" }
     });
+    scheduleSilenceCheck();
 }
 
 async function runButtonPhase() {
@@ -793,6 +794,8 @@ document.getElementById("userInput").addEventListener("input", function () {
     lastTypingAt = Date.now();
     if (this.value.trim()) {
         clearSilenceCheck();
+    } else {
+        scheduleSilenceCheck();
     }
     this.style.height = "42px";
     this.style.height = Math.min(this.scrollHeight, 120) + "px";

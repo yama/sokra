@@ -103,7 +103,12 @@ function defaultGeminiTurn(body) {
 
     const coreDone = ["background", "temperature", "impression", "practical"]
         .every(id => checkpointsAfter.some(cp => cp.id === id && cp.done));
-    const lowEnergy = /特にない|特にはない/.test(userText);
+    const conversationHistory = body.conversationHistory || [];
+    const allUserTexts = [
+        ...conversationHistory.filter(e => e.role === "user").map(e => e.content),
+        userText
+    ].join("\n");
+    const lowEnergy = /特にない|特にはない/.test(allUserTexts);
     const backgroundDone = checkpointsAfter.some(cp => cp.id === "background" && cp.done);
     const isDone = coreDone || (lowEnergy && backgroundDone);
 
@@ -256,7 +261,7 @@ test.describe("interview runtime", () => {
 
     test("silence timer fires and sends an internal instruction to Gemini", async ({ page }) => {
         await page.addInitScript(() => {
-            window.__SOKRA_SILENCE_MS__ = 100;
+            window.__SOKRA_SILENCE_MS__ = 500;
         });
         const geminiCalls = await mockGemini(page, (body, callCount) => {
             if (callCount === 1) {
@@ -293,7 +298,7 @@ test.describe("interview runtime", () => {
 
     test("silence timer with is_done response transitions to closing", async ({ page }) => {
         await page.addInitScript(() => {
-            window.__SOKRA_SILENCE_MS__ = 100;
+            window.__SOKRA_SILENCE_MS__ = 500;
         });
         await mockGemini(page, (_body, callCount) => {
             if (callCount === 1) {
