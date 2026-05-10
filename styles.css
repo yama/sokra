@@ -13,7 +13,7 @@
     --border: #E2E7EE;
     --text: #1A1F2E;
     --text2: #5A6478;
-    --text3: #9AA3B2;
+    --text3: #6D7580;
     --accent: #2B4F88;
     --accent-dark: #1D3C6E;
     --accent-bg: #EDF2FA;
@@ -26,7 +26,6 @@
 body {
     font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', sans-serif;
     background: linear-gradient(150deg, #EFF3F8 0%, #F5F7FA 55%, #EEF2F7 100%);
-    background-attachment: fixed;
     color: var(--text);
     min-height: 100vh;
     display: flex;
@@ -495,4 +494,41 @@ body {
     text-align: center;
     padding: 8px;
     display: none;
+}
+
+@media (max-width: 640px) {
+    body {
+        padding: 0;
+        align-items: flex-start;
+    }
+
+    #startScreen {
+        max-width: none;
+        border-radius: 0;
+        box-shadow: none;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    .start-hero {
+        background: none;
+        padding-top: 0;
+        padding-bottom: 0.5rem;
+    }
+
+    .start-hero h1 {
+        color: var(--text);
+    }
+
+    .start-hero p {
+        color: var(--text2);
+    }
+
+    #mainScreen {
+        max-height: none;
+        border-radius: 0;
+        box-shadow: none;
+    }
 }
