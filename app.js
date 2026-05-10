@@ -26,17 +26,15 @@ document.getElementById("startBtn").addEventListener("click", async () => {
 document.getElementById("sendBtn").addEventListener("click", () => {
     const ta = document.getElementById("userInput");
     const text = ta.value.trim();
-    if (text) { ta.value = ""; ta.style.height = "42px"; session.onUserMessage(text); }
+    if (text) { ta.value = ""; session.onUserMessage(text); }
 });
 
 document.getElementById("userInput").addEventListener("keydown", e => {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); document.getElementById("sendBtn").click(); }
 });
 
-document.getElementById("userInput").addEventListener("input", function () {
+document.getElementById("userInput").addEventListener("input", () => {
     onUserTypingInput();
-    this.style.height = "42px";
-    this.style.height = Math.min(this.scrollHeight, 120) + "px";
 });
 
 document.getElementById("logBtn").addEventListener("click", () => {
