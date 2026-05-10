@@ -55,15 +55,14 @@ export class InterviewSession {
 
     _resetAbandonTimer() {
         this._stopAbandonTimer();
-        if (this._phase !== PHASES.CHAT) return;
+        if (this._phase !== PHASES.CHAT && this._phase !== PHASES.CLOSING) return;
         const token = this._abandonToken;
         this._abandonTimer = setTimeout(() => { this._abandonTimer = null; this._onAbandon(token); }, ABANDON_TIMER_MS);
     }
 
     async _onAbandon(token) {
-        if (token !== this._abandonToken || this._phase !== PHASES.CHAT) return;
-        pushSessionEvent({ role: "system", type: "session_timeout" }).catch(() => {});
-        await this._concludeSession();
+        if (token !== this._abandonToken || (this._phase !== PHASES.CHAT && this._phase !== PHASES.CLOSING)) return;
+        await this._concludeSession({ logEvent: { role: "system", type: "session_timeout" } });
     }
 
     // --- AI speaking with logging ---
@@ -120,6 +119,7 @@ export class InterviewSession {
             }, { allowLogFailure: true });
             showComposer();
             renderClosingAction(() => this._concludeSession({ logEvent: { role: "system", type: "session_completed_by_user" } }));
+            this._resetAbandonTimer();
         }
     }
 

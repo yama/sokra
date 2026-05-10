@@ -94,7 +94,7 @@ function defaultGeminiTurn(body) {
     const userText = String(body.userText || "");
 
     // クロージングサマリー呼び出しの検出（インタビュー用プロンプトを含まない）
-    if (!body.systemPrompt.includes("拾いたい論点")) {
+    if (body.requestKind === "closing_summary") {
         return {
             text: "話してくれた内容がとても参考になりました。ありがとうございました。",
             checkpoints_filled: [],

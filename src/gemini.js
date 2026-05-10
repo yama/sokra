@@ -71,6 +71,7 @@ async function requestGeminiTurn(userText, context, retryReason = "") {
             signal: controller.signal,
             body: JSON.stringify({
                 model,
+                requestKind: inClosingSummary ? "closing_summary" : "interview_turn",
                 systemPrompt: buildSystemPrompt(sessionContext, checkpoints, retryReason, { inClosingPhase, inClosingSummary }),
                 conversationHistory: buildConversationHistory(lastUserMessage),
                 userText,
