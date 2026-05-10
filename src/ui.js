@@ -1,4 +1,5 @@
 const USER_TYPING_SETTLE_MS = 2500;
+const STREAM_CHAR_MS = 35;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 let typingIndicator = null;
@@ -72,12 +73,36 @@ export async function withTypingUntilMessage(task) {
     }
 }
 
+function streamDelay(char) {
+    const jitter = Math.random() * 12;
+    if ('。！？!?'.includes(char)) return STREAM_CHAR_MS + jitter + 120 + Math.random() * 80;
+    if ('、，,'.includes(char)) return STREAM_CHAR_MS + jitter + 40 + Math.random() * 30;
+    return STREAM_CHAR_MS + jitter;
+}
+
+async function streamMessage(role, text) {
+    const msgs = document.getElementById("messages");
+    const div = document.createElement("div");
+    div.className = `msg ${role}`;
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+    div.appendChild(bubble);
+    msgs.appendChild(div);
+    for (let i = 0; i < text.length; i++) {
+        bubble.textContent += text[i];
+        if (i % 8 === 0) msgs.scrollTop = msgs.scrollHeight;
+        await sleep(streamDelay(text[i]));
+    }
+    msgs.scrollTop = msgs.scrollHeight;
+    return div;
+}
+
 export async function speak(text, { minTypingMs = 450 } = {}) {
     await waitForUserTypingToSettle();
     showTyping();
     await holdTyping(minTypingMs);
     removeTyping();
-    addMessage("ai", text);
+    await streamMessage("ai", text);
 }
 
 export async function waitForChoice(prompt, choices) {
