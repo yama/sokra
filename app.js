@@ -35,7 +35,6 @@ document.getElementById("userInput").addEventListener("keydown", e => {
 
 document.getElementById("userInput").addEventListener("input", function () {
     onUserTypingInput();
-    this.value.trim() ? session.pauseSilenceTimer() : session.resumeSilenceTimer();
     this.style.height = "42px";
     this.style.height = Math.min(this.scrollHeight, 120) + "px";
 });
