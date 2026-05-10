@@ -61,7 +61,10 @@ function call_gemini(array $params): array
         throw new RuntimeException('GEMINI_API_KEY is not set in .env');
     }
 
-    $modelName = (string) ($params['model'] ?: 'gemini-2.5-flash');
+    $modelName = (string) ($params['model'] ?? '');
+    if ($modelName === '') {
+        throw new RuntimeException('model is required');
+    }
     $endpoint = sprintf(
         'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent',
         rawurlencode($modelName)

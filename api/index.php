@@ -19,10 +19,15 @@ try {
         $body = read_json_body();
         $sessionId = make_session_id();
 
+        $model = (string) ($body['model'] ?? '');
+        if ($model === '') {
+            send_json(400, ['error' => 'model is required']);
+        }
+
         append_jsonl(session_file_path($sessionId), [
             'type' => 'meta',
             'ts' => gmdate('c'),
-            'model' => $body['model'] ?? 'gemini-2.5-flash',
+            'model' => $model,
             'client' => $body['client'] ?? 'web',
         ]);
 
@@ -57,9 +62,13 @@ try {
 
     if ($method === 'POST' && $path === '/api/gemini') {
         $body = read_json_body();
+        $model = (string) ($body['model'] ?? '');
+        if ($model === '') {
+            send_json(400, ['error' => 'model is required']);
+        }
         try {
             send_json(200, call_gemini([
-                'model' => $body['model'] ?? null,
+                'model' => $model,
                 'systemPrompt' => $body['systemPrompt'] ?? null,
                 'conversationHistory' => $body['conversationHistory'] ?? null,
                 'userText' => $body['userText'] ?? null,
