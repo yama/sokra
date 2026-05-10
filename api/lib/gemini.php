@@ -70,10 +70,12 @@ function call_gemini(array $params): array
         rawurlencode($modelName)
     );
 
-    $generationConfig = [
-        'maxOutputTokens' => 512,
-        'thinkingConfig' => ['thinkingBudget' => 0],
-    ];
+    // flash: thinking 無効化でコスト削減 / pro: thinking 必須かつ thinking トークンが maxOutputTokens に含まれるため余裕を持たせる
+    $isFlash = str_contains($modelName, 'flash');
+    $generationConfig = ['maxOutputTokens' => $isFlash ? 512 : 8192];
+    if ($isFlash) {
+        $generationConfig['thinkingConfig'] = ['thinkingBudget' => 0];
+    }
     if (!empty($params['responseMimeType'])) {
         $generationConfig['responseMimeType'] = (string) $params['responseMimeType'];
     }
