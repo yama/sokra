@@ -19,10 +19,15 @@ try {
         $body = read_json_body();
         $sessionId = make_session_id();
 
+        $model = (string) ($body['model'] ?? '');
+        if ($model === '') {
+            send_json(400, ['error' => 'model is required']);
+        }
+
         append_jsonl(session_file_path($sessionId), [
             'type' => 'meta',
             'ts' => gmdate('c'),
-            'model' => $body['model'] ?? 'gemini-2.5-flash',
+            'model' => $model,
             'client' => $body['client'] ?? 'web',
         ]);
 
