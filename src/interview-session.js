@@ -79,6 +79,7 @@ export class InterviewSession {
                 return;
             }
             pushSessionEvent({ role: "internal", text: silencePrompt, type: "silence_trigger" }).catch(() => {});
+            this.markCheckpoints(turn.checkpoints_filled);
             await this._speakAndLog(turn.text, { role: "ai", text: turn.text, type: "silence_turn", is_done: turn.is_done });
             turn.is_done ? this._beginClosingPhase() : this.resumeSilenceTimer();
         } catch (e) {
@@ -131,13 +132,14 @@ export class InterviewSession {
     }
 
     async onUserMessage(text) {
-        if (!text.trim() || !this.isActive()) return;
+        const normalizedText = text.trim();
+        if (!normalizedText || !this.isActive()) return;
         this.pauseSilenceTimer();
-        this._lastUserMessage = text.trim();
-        addMessage("user", text);
+        this._lastUserMessage = normalizedText;
+        addMessage("user", normalizedText);
         document.getElementById("sendBtn").disabled = true;
         try {
-            await pushSessionEvent({ role: "user", text });
+            await pushSessionEvent({ role: "user", text: normalizedText });
             const context = {
                 model: this.model,
                 sessionContext: this.sessionContext,
@@ -145,7 +147,7 @@ export class InterviewSession {
                 lastUserMessage: this._lastUserMessage,
                 inClosingPhase: this._phase === PHASES.CLOSING,
             };
-            const turn = await withTypingUntilMessage(() => generateInterviewTurn(this._lastUserMessage, context));
+            const turn = await withTypingUntilMessage(() => generateInterviewTurn(normalizedText, context));
             if (!this.isActive()) { removeTyping(); return; }
             this.markCheckpoints(turn.checkpoints_filled);
             await this._speakAndLog(turn.text, {

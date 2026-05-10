@@ -20,7 +20,7 @@ function buildConversationHistory(lastUserMessage) {
     const last = log[log.length - 1];
     if (last?.role === "user" && last.text === lastUserMessage) log.pop();
     return log
-        .filter(e => ["user", "ai", "internal"].includes(e.role) && typeof e.text === "string")
+        .filter(e => ["user", "ai"].includes(e.role) && typeof e.text === "string")
         .map(e => ({ role: e.role === "ai" ? "assistant" : "user", content: e.text }));
 }
 

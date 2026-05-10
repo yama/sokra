@@ -30,7 +30,7 @@ document.getElementById("sendBtn").addEventListener("click", () => {
 });
 
 document.getElementById("userInput").addEventListener("keydown", e => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); document.getElementById("sendBtn").click(); }
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); document.getElementById("sendBtn").click(); }
 });
 
 document.getElementById("userInput").addEventListener("input", function () {
