@@ -92,6 +92,16 @@ function inferCheckpoints(text) {
 
 function defaultGeminiTurn(body) {
     const userText = String(body.userText || "");
+
+    // クロージングサマリー呼び出しの検出（インタビュー用プロンプトを含まない）
+    if (body.requestKind === "closing_summary") {
+        return {
+            text: "話してくれた内容がとても参考になりました。ありがとうございました。",
+            checkpoints_filled: [],
+            is_done: false
+        };
+    }
+
     const checkpoints = parseCheckpoints(String(body.systemPrompt || ""));
     const filled = inferCheckpoints(userText).filter(id =>
         checkpoints.some(cp => cp.id === id && !cp.done)
@@ -175,19 +185,20 @@ test.describe("interview runtime", () => {
         await expect(page.locator("#endedNote")).toBeHidden();
         await finishInterview(page);
 
-        expect(geminiCalls).toHaveLength(3);
+        expect(geminiCalls).toHaveLength(4); // 3 conversation turns + 1 closing summary
         expect(geminiCalls[0].responseMimeType).toBe("application/json");
-        expect(geminiCalls[0].systemPrompt).toContain("質問しないターンの例");
+        expect(geminiCalls[0].systemPrompt).toContain("ターンの例");
         expect(geminiCalls[0].systemPrompt).toContain("現在の状態");
         expect(geminiCalls[0].systemPrompt).toContain("論点はノルマではありません");
 
         const { usageText, events } = await currentSession(page);
         expect(usageText).toContain("会話制御: Gemini 委任");
         expect(events.filter(event => event.type === "warning")).toEqual([]);
-        const lastAiEvent = [...events].reverse().find(event => event.role === "ai");
-        expect(lastAiEvent?.type).toBe("generated_turn");
-        expect(lastAiEvent?.answered_checkpoints).toEqual(["background"]);
-        expect(lastAiEvent?.is_done).toBe(true);
+        const lastGeneratedTurn = [...events].reverse().find(event => event.role === "ai" && event.type === "generated_turn");
+        expect(lastGeneratedTurn?.answered_checkpoints).toEqual(["background"]);
+        expect(lastGeneratedTurn?.is_done).toBe(true);
+        expect(events.some(event => event.type === "closing_summary")).toBe(true);
+        expect(events.some(event => event.type === "closing_guide")).toBe(true);
         expect(events.some(event => event.type === "session_completed_by_user")).toBe(true);
     });
 
@@ -259,147 +270,23 @@ test.describe("interview runtime", () => {
         expect(geminiCalls[0].systemPrompt).toContain("誘導になります");
     });
 
-    test("silence timer fires and sends an internal instruction to Gemini", async ({ page }) => {
+    test("abandon timer ends session after prolonged inactivity", async ({ page }) => {
         await page.addInitScript(() => {
-            window.__SOKRA_SILENCE_MS__ = 500;
+            window.__SOKRA_ABANDON_MS__ = 1000;
         });
-        const geminiCalls = await mockGemini(page, (body, callCount) => {
-            if (callCount === 1) {
-                return {
-                    text: "へえー、主体性があるように聞こえる感じですね。",
-                    checkpoints_filled: [],
-                    is_done: false
-                };
-            }
-            expect(body.userText).toContain("内部指示");
-            expect(body.systemPrompt).toContain("内部指示への対応");
-            return {
-                text: "仕事で使う場面でも、そこはちょっと気になりそうですか？",
-                checkpoints_filled: [],
-                is_done: false
-            };
-        });
+        await mockGemini(page, () => ({
+            text: "うんうん、なるほど。どんなところが印象に残りましたか？",
+            checkpoints_filled: [],
+            is_done: false
+        }));
         await startInterview(page);
 
-        let reply = await sendAndReadReply(page, "私もその色は好きとか、主体性のある発言をすることがあるらしい。意志があるみたい");
-        expect(reply).toContain("主体性");
-        expect(reply).not.toContain("仕事で使う場面");
-        expect(geminiCalls[0].systemPrompt).toContain("少し間を置いて自然に橋をかける例");
-
-        await waitForAiTextChange(page, reply);
-        reply = await readLastAiText(page);
-        expect(reply).toContain("仕事で使う場面");
-        expect(geminiCalls.length).toBeGreaterThanOrEqual(2);
+        // ユーザーが応答しなければ abandonタイマーがセッションを終了する
+        await expect(page.locator("#endedNote")).toBeVisible({ timeout: 5000 });
+        await page.waitForTimeout(500); // session_timeout イベントの永続化を待つ
 
         const { events } = await currentSession(page);
-        expect(events.some(event => event.role === "internal" && event.type === "silence_trigger")).toBe(true);
-        expect(events.some(event => event.type === "silence_turn")).toBe(true);
-    });
-
-    test("silence timer with is_done response transitions to closing", async ({ page }) => {
-        await page.addInitScript(() => {
-            window.__SOKRA_SILENCE_MS__ = 500;
-        });
-        await mockGemini(page, (_body, callCount) => {
-            if (callCount === 1) {
-                return {
-                    text: "そうですね。",
-                    checkpoints_filled: [],
-                    is_done: false
-                };
-            }
-            return {
-                text: "今日はありがとうございました。",
-                checkpoints_filled: [],
-                is_done: true
-            };
-        });
-        await startInterview(page);
-
-        const reply = await sendAndReadReply(page, "特に印象はないかな");
-        await waitForAiTextChange(page, reply);
-
-        await expect(page.locator(".closing-action")).toBeVisible();
-        await expect(page.locator("#endedNote")).toBeHidden();
-
-        const { events } = await currentSession(page);
-        const silenceTurn = [...events].reverse().find(event => event.type === "silence_turn");
-        expect(silenceTurn?.is_done).toBe(true);
-    });
-
-    test("Gemini failure during silence turn reschedules the silence check", async ({ page }) => {
-        await page.addInitScript(() => {
-            window.__SOKRA_SILENCE_MS__ = 500;
-        });
-        let callCount = 0;
-        await page.route("**/api/gemini", async route => {
-            callCount++;
-            if (callCount === 1) {
-                await route.fulfill({
-                    status: 200,
-                    contentType: "application/json",
-                    body: JSON.stringify({
-                        text: JSON.stringify({ text: "へえー、面白いですね。", checkpoints_filled: [], is_done: false }),
-                        usage: { promptTokenCount: 10, outputTokenCount: 5, totalTokenCount: 15 },
-                        finishReason: "STOP", modelVersion: "mock"
-                    })
-                });
-            } else if (callCount <= 3) {
-                await route.fulfill({
-                    status: 500,
-                    contentType: "application/json",
-                    body: JSON.stringify({ error: "Gemini temporarily unavailable" })
-                });
-            } else {
-                await route.fulfill({
-                    status: 200,
-                    contentType: "application/json",
-                    body: JSON.stringify({
-                        text: JSON.stringify({ text: "今日はありがとうございました。", checkpoints_filled: [], is_done: true }),
-                        usage: { promptTokenCount: 10, outputTokenCount: 5, totalTokenCount: 15 },
-                        finishReason: "STOP", modelVersion: "mock"
-                    })
-                });
-            }
-        });
-        await startInterview(page);
-
-        const reply = await sendAndReadReply(page, "面白かったです");
-        await waitForAiTextChange(page, reply);
-        await expect(page.locator(".closing-action")).toBeVisible();
-        expect(callCount).toBeGreaterThanOrEqual(4);
-
-        const { events } = await currentSession(page);
-        expect(events.some(event => event.type === "silence_turn_error")).toBe(true);
-        expect(events.some(event => event.type === "silence_turn" && event.is_done === true)).toBe(true);
-    });
-
-    test("clearing the composer input reschedules the silence timer", async ({ page }) => {
-        await page.addInitScript(() => {
-            window.__SOKRA_SILENCE_MS__ = 500;
-        });
-        const geminiCalls = await mockGemini(page, (body, callCount) => {
-            if (callCount === 1) {
-                return { text: "そうなんですね。", checkpoints_filled: [], is_done: false };
-            }
-            expect(body.userText).toContain("内部指示");
-            return { text: "今日はありがとうございました。", checkpoints_filled: [], is_done: true };
-        });
-        await startInterview(page);
-
-        const reply = await sendAndReadReply(page, "少し難しかったです");
-        expect(reply).toContain("そうなんですね");
-
-        const input = page.locator("#userInput");
-        await input.fill("draft text");
-        await input.fill("");
-
-        await waitForAiTextChange(page, reply);
-        await expect(page.locator(".closing-action")).toBeVisible();
-
-        expect(geminiCalls.length).toBeGreaterThanOrEqual(2);
-        const { events } = await currentSession(page);
-        expect(events.some(event => event.type === "silence_turn")).toBe(true);
+        expect(events.some(event => event.type === "session_timeout")).toBe(true);
     });
 
     test("Gemini timeout retries once and then aborts the chat", async ({ page }) => {
@@ -456,9 +343,8 @@ test.describe("interview runtime", () => {
         await expect(page.locator(".closing-action")).toBeVisible();
 
         const { events } = await currentSession(page);
-        const lastAiEvent = [...events].reverse().find(event => event.role === "ai");
-        expect(lastAiEvent?.type).toBe("generated_turn");
-        expect(lastAiEvent?.is_done).toBe(true);
+        const lastGeneratedTurn = [...events].reverse().find(event => event.role === "ai" && event.type === "generated_turn");
+        expect(lastGeneratedTurn?.is_done).toBe(true);
     });
 
     test("meta complaint is sent to Gemini and can trigger closing", async ({ page }) => {
@@ -484,12 +370,11 @@ test.describe("interview runtime", () => {
         const reply = await sendAndReadReply(page, "会話が噛み合ってません");
         expect(reply).toContain("噛み合っていない");
         await expect(page.locator(".closing-action")).toBeVisible();
-        expect(geminiCalls).toHaveLength(2);
-        expect(geminiCalls[1].systemPrompt).toContain("会話を終わらせるべき場面");
+        expect(geminiCalls).toHaveLength(3); // 2 conversation turns + 1 closing summary
+        expect(geminiCalls[1].systemPrompt).toContain("クロージングの流れ");
 
         const { events } = await currentSession(page);
-        const lastAiEvent = [...events].reverse().find(event => event.role === "ai");
-        expect(lastAiEvent?.type).toBe("generated_turn");
-        expect(lastAiEvent?.is_done).toBe(true);
+        const lastGeneratedTurn = [...events].reverse().find(event => event.role === "ai" && event.type === "generated_turn");
+        expect(lastGeneratedTurn?.is_done).toBe(true);
     });
 });

@@ -8,7 +8,8 @@ import {
     setSessionEndedNote, renderUsageStats
 } from "./ui.js";
 
-const SILENCE_TIMER_MS = window.__SOKRA_SILENCE_MS__ || 8000;
+const ABANDON_TIMER_MS = window.__SOKRA_ABANDON_MS__ || 5 * 60 * 1000;
+
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const PHASES = { START: "start", BUTTONS: "buttons", CHAT: "chat", CLOSING: "closing", ENDED: "ended" };
@@ -20,8 +21,8 @@ export class InterviewSession {
         this.checkpoints = createCheckpoints();
         this._phase = PHASES.START;
         this._lastUserMessage = "";
-        this._silenceTimer = null;
-        this._silenceToken = 0;
+        this._abandonTimer = null;
+        this._abandonToken = 0;
     }
 
     // --- Stats ---
@@ -45,47 +46,23 @@ export class InterviewSession {
         renderChecklist(this.checkpoints);
     }
 
-    // --- Silence timer ---
+    // --- Abandon timer（長時間放置の自動終了） ---
 
-    pauseSilenceTimer() {
-        this._silenceToken++;
-        if (this._silenceTimer) { clearTimeout(this._silenceTimer); this._silenceTimer = null; }
+    _stopAbandonTimer() {
+        this._abandonToken++;
+        if (this._abandonTimer) { clearTimeout(this._abandonTimer); this._abandonTimer = null; }
     }
 
-    resumeSilenceTimer() {
-        this.pauseSilenceTimer();
-        if (this._phase !== PHASES.CHAT) return;
-        const token = this._silenceToken;
-        this._silenceTimer = setTimeout(() => { this._silenceTimer = null; this._onSilence(token); }, SILENCE_TIMER_MS);
+    _resetAbandonTimer() {
+        this._stopAbandonTimer();
+        if (this._phase !== PHASES.CHAT && this._phase !== PHASES.CLOSING) return;
+        const token = this._abandonToken;
+        this._abandonTimer = setTimeout(() => { this._abandonTimer = null; this._onAbandon(token); }, ABANDON_TIMER_MS);
     }
 
-    async _onSilence(token) {
-        if (token !== this._silenceToken || this._phase !== PHASES.CHAT) return;
-        const input = document.getElementById("userInput");
-        if (input?.value.trim()) return;
-
-        const silencePrompt = "内部指示: ユーザーが沈黙中です。会話として十分な内容があれば is_done: true にしてください。";
-        try {
-            const turn = await withTypingUntilMessage(() =>
-                generateInterviewTurn(silencePrompt, {
-                    model: this.model,
-                    sessionContext: this.sessionContext,
-                    checkpoints: this.checkpoints,
-                    lastUserMessage: this._lastUserMessage,
-                })
-            );
-            if (token !== this._silenceToken || this._phase !== PHASES.CHAT || input?.value.trim()) {
-                removeTyping();
-                return;
-            }
-            pushSessionEvent({ role: "internal", text: silencePrompt, type: "silence_trigger" }).catch(() => {});
-            this.markCheckpoints(turn.checkpoints_filled);
-            await this._speakAndLog(turn.text, { role: "ai", text: turn.text, type: "silence_turn", is_done: turn.is_done });
-            turn.is_done ? this._beginClosingPhase() : this.resumeSilenceTimer();
-        } catch (e) {
-            pushSessionEvent({ role: "system", type: "silence_turn_error", message: e.message }).catch(() => {});
-            this.resumeSilenceTimer();
-        }
+    async _onAbandon(token) {
+        if (token !== this._abandonToken || (this._phase !== PHASES.CHAT && this._phase !== PHASES.CLOSING)) return;
+        await this._concludeSession({ logEvent: { role: "system", type: "session_timeout" } });
     }
 
     // --- AI speaking with logging ---
@@ -104,16 +81,52 @@ export class InterviewSession {
 
     // --- Phase transitions ---
 
-    _beginClosingPhase() {
-        this.pauseSilenceTimer();
+    async _beginClosingPhase() {
+        this._stopAbandonTimer();
         this._phase = PHASES.CLOSING;
-        renderClosingAction(() => this._concludeSession({ logEvent: { role: "system", type: "session_completed_by_user" } }));
+        hideComposer();
+
+        await sleep(500);
+
+        // Message 2: 会話内容を踏まえた個別メッセージ
+        const closingPrompt = "内部指示: クロージングメッセージを生成してください。";
+        try {
+            const turn = await withTypingUntilMessage(() =>
+                generateInterviewTurn(closingPrompt, {
+                    model: this.model,
+                    sessionContext: this.sessionContext,
+                    checkpoints: this.checkpoints,
+                    lastUserMessage: this._lastUserMessage,
+                    inClosingSummary: true,
+                })
+            );
+            if (this._phase === PHASES.CLOSING) {
+                await this._speakAndLog(turn.text, {
+                    role: "ai", text: turn.text, type: "closing_summary",
+                }, { allowLogFailure: true });
+            }
+        } catch (e) {
+            pushSessionEvent({ role: "system", type: "closing_summary_error", message: e.message }).catch(() => {});
+        }
+
+        await sleep(400);
+
+        // Message 3: 固定の案内文 + 終了ボタン
+        if (this._phase === PHASES.CLOSING) {
+            const guideText = "ゆっくりどうぞ。終わりにするときは下のボタンで終了できます。ありがとうございました。";
+            await this._speakAndLog(guideText, {
+                role: "ai", text: guideText, type: "closing_guide",
+            }, { allowLogFailure: true });
+            showComposer();
+            renderClosingAction(() => this._concludeSession({ logEvent: { role: "system", type: "session_completed_by_user" } }));
+            this._resetAbandonTimer();
+        }
     }
 
     async _concludeSession({ logEvent } = {}) {
         if (this._phase === PHASES.ENDED) return;
         this._phase = PHASES.ENDED;
-        this.pauseSilenceTimer();
+        this._stopAbandonTimer();
         removeTyping();
         removeClosingAction();
         hideComposer();
@@ -134,7 +147,7 @@ export class InterviewSession {
     async onUserMessage(text) {
         const normalizedText = text.trim();
         if (!normalizedText || !this.isActive()) return;
-        this.pauseSilenceTimer();
+        this._resetAbandonTimer();
         this._lastUserMessage = normalizedText;
         addMessage("user", normalizedText);
         document.getElementById("sendBtn").disabled = true;
@@ -155,9 +168,9 @@ export class InterviewSession {
                 answered_checkpoints: turn.checkpoints_filled, is_done: turn.is_done,
             });
             if (turn.is_done && this._phase === PHASES.CHAT) {
-                this._beginClosingPhase();
-            } else if (!turn.is_done) {
-                this.resumeSilenceTimer();
+                this._beginClosingPhase().catch(e => {
+                    pushSessionEvent({ role: "system", type: "closing_phase_error", message: e.message }).catch(() => {});
+                });
             }
         } catch (e) {
             pushSessionEvent({ role: "system", type: "ai_turn_error", message: e.message }).catch(() => {});
@@ -179,11 +192,10 @@ export class InterviewSession {
         removeClosingAction();
         setSessionEndedNote("");
         this._phase = PHASES.CHAT;
-        this.pauseSilenceTimer();
         this._lastUserMessage = "";
         const openingText = "今日はありがとうございました。印象に残っていることがあれば、そこから聞かせてください。";
         await this._speakAndLog(openingText, { role: "ai", text: openingText, type: "start_chat_opening" });
-        this.resumeSilenceTimer();
+        this._resetAbandonTimer();
     }
 
     async _collectParticipantContext() {

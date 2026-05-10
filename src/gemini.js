@@ -59,7 +59,7 @@ function recordUsage(usage) {
 
 async function requestGeminiTurn(userText, context, retryReason = "") {
     usageSummary.requests += 1;
-    const { model, sessionContext, checkpoints, lastUserMessage, inClosingPhase = false } = context;
+    const { model, sessionContext, checkpoints, lastUserMessage, inClosingPhase = false, inClosingSummary = false } = context;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), GEMINI_REQUEST_TIMEOUT_MS);
@@ -71,7 +71,8 @@ async function requestGeminiTurn(userText, context, retryReason = "") {
             signal: controller.signal,
             body: JSON.stringify({
                 model,
-                systemPrompt: buildSystemPrompt(sessionContext, checkpoints, retryReason, { inClosingPhase }),
+                requestKind: inClosingSummary ? "closing_summary" : "interview_turn",
+                systemPrompt: buildSystemPrompt(sessionContext, checkpoints, retryReason, { inClosingPhase, inClosingSummary }),
                 conversationHistory: buildConversationHistory(lastUserMessage),
                 userText,
                 responseMimeType: "application/json"
