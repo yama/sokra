@@ -329,7 +329,8 @@ body {
     background: var(--surface2);
     color: var(--text);
     outline: none;
-    height: 42px;
+    field-sizing: content;
+    min-height: 42px;
     max-height: 120px;
     overflow-y: auto;
     transition: border-color 0.15s, background 0.15s;
