@@ -78,10 +78,11 @@ Sokra は、会話の中で拾いたい論点を内部チェックリストと�
 
 ## 技術構成
 
-- **フロントエンド**: 素の HTML/CSS/JS（`index.html`、`styles.css`、`app.js`、`interview-flow.js`。ビルド不要）
-- **バックエンド**: PHP（`api/index.php`、Gemini API プロキシ兼ローカルファイルログ保存）
-- **AI**: Gemini API（自由会話の発話生成。チェックポイント検証と終了判定はアプリ側で実施）
-- **ログ形式**: JSONL（サーバー側追記） + JSON エクスポート（クライアント側）
+- **フロントエンド**: 素の HTML/CSS/JS（`index.html`、`styles.css`、`app.js` + `src/` 配下の ES Modules。ビルド不要）
+- **バックエンド**: PHP（`router.php`、`api/index.php`、`api/lib/*.php`）
+- **AI**: Gemini API（自由会話の発話生成、終了判定、チェックポイント更新）
+- **ログ形式**: `data/sessions/*.jsonl` へのサーバー側追記 + クライアント側 JSON ダウンロード
+- **E2E**: Playwright（`tests/interview.spec.js`）
 - **分析**: NotebookLM などでの後分析を想定
 
 ---
@@ -91,23 +92,48 @@ Sokra は、会話の中で拾いたい論点を内部チェックリストと�
 ```bash
 git clone https://github.com/yourname/sokra.git
 cd sokra
+npm install
 cp .env.example .env
-# GEMINI_API_KEY は自由会話フェーズで使用
-# 通常のインタビューを動かす場合も設定
+# 自由会話フェーズで Gemini API を使うため設定
+# ローカルで通常のインタビューを動かす場合も必要
 npm start
 ```
 
-`npm start` は内部で `php -S 127.0.0.1:3000 router.php` を起動します。ブラウザで `http://127.0.0.1:3000` を開いてください。自由会話フェーズでは `/api/gemini` 経由で Gemini API を使います。
+ローカル開発では、`npm start` が `php -S 127.0.0.1:3000 router.php` を起動します。ブラウザで `http://127.0.0.1:3000` を開いてください。
 
-セッションログはサーバー側の `data/sessions/*.jsonl` に保存されます。
+`.env.example`:
+
+```dotenv
+# 自由会話フェーズで Gemini API を使います。
+# ローカルで通常のインタビューを動かす場合も設定してください。
+GEMINI_API_KEY=
+```
+
+セッションログは `data/sessions/*.jsonl` に保存されます。`data/sessions/` が存在しない場合は、API 起動時に自動作成されます。
+
+## API とルーティング
+
+ローカル開発では `router.php` がフロントエンド配信と API ルーティングを兼ねます。
+
+- `GET /`:
+  `index.html` を返す
+- `POST /api/session/start`:
+  セッション開始。`sessionId` を発行する
+- `POST /api/session/{sessionId}/event`:
+  セッションイベントを JSONL に追記する
+- `GET /api/session/{sessionId}`:
+  保存済みセッションを JSON として返す
+- `POST /api/gemini`:
+  Gemini API 呼び出しを中継する
 
 ## 公開時の構成
 
-レンタルサーバ向けの本番構成は、Apache + PHP を前提にしています。
+レンタルサーバ向けの本番構成は、Apache + PHP を前提にしています。こちらは `3000` 固定ではなく、Web サーバー側の設定に従います。
 
 - `/api/...` は `api/.htaccess` で `api/index.php` にルーティング
-- `.env` は公開ディレクトリ内に置く前提だが、ルートの `.htaccess` で直アクセスを拒否
-- セッションログは `data/sessions/*.jsonl` に保存
+- ルートの `.htaccess` でドット始まりファイルへの直アクセスを拒否
+- `.env` は `api/lib/env.php` から読み込む
+- セッションログは `data/sessions/*.jsonl` に保存されるため、書き込み権限が必要
 
 `.env` の例:
 
@@ -123,7 +149,7 @@ Playwright を使ったヘッドレスの UI 動作確認を用意していま�
 npm run test:e2e
 ```
 
-このテストは `http://127.0.0.1:3000` の画面を実際に開き、ボタンフェーズから自由会話、終了までを通します。終了時には `usageStats` と `data/sessions/*.jsonl` を照合し、`warning` や `chat_failure_abort` が出ていないことも確認します。
+このテストは `http://127.0.0.1:3000` の画面を実際に開き、開始画面、ボタンフェーズ、自由会話、終了操作までを通します。終了時には `usageStats` と `data/sessions/*.jsonl` を照合し、`warning` や `chat_failure_abort` が出ていないことも確認します。
 
 テストは古いローカルサーバーを再利用せず、現行コードで起動し直します。すでに `3000` 番ポートを使っている開発サーバーがある場合は、停止してから実行してください。
 
@@ -158,6 +184,14 @@ ps -ef | rg "php -S 127.0.0.1:3000|npm start"
 ```bash
 git config commit.template .gitmessage.txt
 ```
+
+## リポジトリ内の補助資料
+
+- `AGENTS.md`: AI 共通ルールの正本
+- `CLAUDE.md`: Claude 向け補助ファイル
+- `docs/commit-convention.md`: コミットメッセージ規約
+- `docs/commit-prompt.md`: コミットメッセージ生成用プロンプト
+- `skills/`: 共用スキル
 
 ## 共用スキル
 
