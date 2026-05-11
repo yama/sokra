@@ -222,6 +222,7 @@ export class InterviewSession {
 
         document.getElementById("startScreen").style.display = "none";
         document.getElementById("mainScreen").style.display = "flex";
+        document.getElementById("messages").focus();
         renderChecklist(this.checkpoints);
         this.refreshStats();
 

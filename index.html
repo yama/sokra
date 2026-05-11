@@ -31,7 +31,9 @@
             </div>
             <button id="startBtn">開始する</button>
             <div class="start-error"
-                 id="startError">開始できませんでした</div>
+                 id="startError"
+                 role="alert"
+                 aria-live="assertive">開始できませんでした</div>
         </div>
     </div>
 
@@ -43,11 +45,16 @@
                 <div class="chat-header-sub">インタビュー</div>
             </div>
             <div class="progress-wrap"
-                 id="progressDots"></div>
+                 id="progressDots"
+                 aria-hidden="true"></div>
         </div>
 
         <div class="messages"
-             id="messages"></div>
+             id="messages"
+             role="log"
+             aria-live="polite"
+             aria-label="会話"
+             tabindex="-1"></div>
 
         <div class="input-area"
              id="inputArea">

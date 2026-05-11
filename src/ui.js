@@ -1,6 +1,7 @@
 const USER_TYPING_SETTLE_MS = 2500;
 const STREAM_CHAR_MS = 35;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+const prefersReducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 let typingIndicator = null;
 let typingStartedAt = 0;
@@ -36,7 +37,7 @@ function showTyping() {
     const div = document.createElement("div");
     div.className = "msg ai";
     div.id = "typingIndicator";
-    div.innerHTML = `<div class="typing"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>`;
+    div.innerHTML = `<div class="typing" role="status" aria-label="AIが入力中"><div class="dot" aria-hidden="true"></div><div class="dot" aria-hidden="true"></div><div class="dot" aria-hidden="true"></div></div>`;
     msgs.appendChild(div);
     typingIndicator = div;
     typingStartedAt = Date.now();
@@ -88,12 +89,17 @@ async function streamMessage(role, text) {
     bubble.className = "bubble";
     div.appendChild(bubble);
     msgs.appendChild(div);
-    for (let i = 0; i < text.length; i++) {
-        bubble.textContent += text[i];
-        if (i % 8 === 0) msgs.scrollTop = msgs.scrollHeight;
-        await sleep(streamDelay(text[i]));
+    if (prefersReducedMotion()) {
+        bubble.textContent = text;
+        msgs.scrollTop = msgs.scrollHeight;
+    } else {
+        for (let i = 0; i < text.length; i++) {
+            bubble.textContent += text[i];
+            if (i % 8 === 0) msgs.scrollTop = msgs.scrollHeight;
+            await sleep(streamDelay(text[i]));
+        }
+        msgs.scrollTop = msgs.scrollHeight;
     }
-    msgs.scrollTop = msgs.scrollHeight;
     return div;
 }
 
@@ -114,6 +120,8 @@ export async function waitForChoice(prompt, choices) {
         const lastAI = [...msgs.querySelectorAll(".msg.ai")].pop();
         const wrap = document.createElement("div");
         wrap.className = "choices";
+        wrap.setAttribute("role", "group");
+        wrap.setAttribute("aria-label", "選択肢");
         choices.forEach(c => {
             const btn = document.createElement("button");
             btn.className = "choice-btn";
@@ -137,7 +145,7 @@ export function renderChecklist(checkpoints) {
         .map(c => `<div class="check-item ${c.done ? "done" : ""}">${c.label}</div>`)
         .join("");
     document.getElementById("progressDots").innerHTML = checkpoints
-        .map(c => `<div class="progress-dot ${c.done ? "done" : ""}"></div>`)
+        .map(c => `<div class="progress-dot ${c.done ? "done" : ""}" aria-hidden="true"></div>`)
         .join("");
 }
 
