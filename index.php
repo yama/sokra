@@ -5,6 +5,11 @@ declare(strict_types=1);
 require_once __DIR__ . '/api/lib/bootstrap.php';
 
 $clientConfig = client_app_config();
+$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+$origin = $scheme . '://' . $host;
+$pageUrl = $origin . ($_SERVER['REQUEST_URI'] ?? '/');
+$ogImageUrl = $origin . '/assets/images/ogp/default.png';
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -14,6 +19,18 @@ $clientConfig = client_app_config();
     <meta name="viewport"
           content="width=device-width, initial-scale=1.0">
     <title>セミナーインタビュー</title>
+    <meta name="description" content="AI活用セミナーの参加者に、ソクラテスのように問いを重ねながら率直な感想を引き出しやすくするインタビューツールです。">
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="セミナーインタビュー">
+    <meta property="og:description" content="AI活用セミナーの参加者に、ソクラテスのように問いを重ねながら率直な感想を引き出しやすくするインタビューツールです。">
+    <meta property="og:url" content="<?= htmlspecialchars($pageUrl, ENT_QUOTES, 'UTF-8') ?>">
+    <meta property="og:image" content="<?= htmlspecialchars($ogImageUrl, ENT_QUOTES, 'UTF-8') ?>">
+    <meta property="og:locale" content="ja_JP">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="セミナーインタビュー">
+    <meta name="twitter:description" content="AI活用セミナーの参加者に、ソクラテスのように問いを重ねながら率直な感想を引き出しやすくするインタビューツールです。">
+    <meta name="twitter:image" content="<?= htmlspecialchars($ogImageUrl, ENT_QUOTES, 'UTF-8') ?>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700&display=swap" rel="stylesheet">
