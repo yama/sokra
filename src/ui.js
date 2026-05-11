@@ -85,6 +85,7 @@ async function streamMessage(role, text) {
     const msgs = document.getElementById("messages");
     const div = document.createElement("div");
     div.className = `msg ${role}`;
+    div.setAttribute("aria-hidden", "true"); // ストリーム中は live region に通知させない
     const bubble = document.createElement("div");
     bubble.className = "bubble";
     div.appendChild(bubble);
@@ -100,6 +101,7 @@ async function streamMessage(role, text) {
         }
         msgs.scrollTop = msgs.scrollHeight;
     }
+    div.removeAttribute("aria-hidden"); // 完了後に公開して全文を一度だけアナウンス
     return div;
 }
 
