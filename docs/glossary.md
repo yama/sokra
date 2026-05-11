@@ -230,9 +230,9 @@ AIが知覚を持っているように見える言い回しを使うこと。
 ### ゲストコンテキスト
 
 ボタンフェーズで収集した `format`（参加形式）/ `timing`（参加タイミング）/ `mood`（温度感）のセット。
-`sessionContext` としてセッション中保持され、システムプロンプトとログ（`seminar_context`）の両方に使われる。
+`sessionContext` としてセッション中保持され、システムプロンプトと会話記録（`seminar_context` フィールド）の両方に使われる。
 
-- 備考: コードの変数名 `sessionContext`・ログキー `seminar_context` はセミナー用途の現実装を反映した命名
+- 備考: コードの変数名 `sessionContext`・会話記録フィールド名 `seminar_context` はセミナー用途の現実装を反映した命名
 
 ### 用語方針
 
