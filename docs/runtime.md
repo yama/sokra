@@ -28,5 +28,6 @@ Apache + PHP を前提にした一般的なレンタルサーバ構成で動か�
 
 - `/api/...` は `api/.htaccess` で `api/index.php` にルーティング
 - ルートの `.htaccess` でドット始まりファイルへの直アクセスを拒否
+- `APP_URL` を設定すると、OGP 用の canonical URL 生成にその値を使う
 - `APP_ENV=development` のときだけ開発用表示を出す
 - `data/sessions/*.jsonl` に書き込める権限が必要

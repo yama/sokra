@@ -5,11 +5,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/api/lib/bootstrap.php';
 
 $clientConfig = client_app_config();
-$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-$origin = $scheme . '://' . $host;
-$pageUrl = $origin . ($_SERVER['REQUEST_URI'] ?? '/');
-$ogImageUrl = $origin . '/assets/images/ogp/default.png';
+$pageUrl = request_url();
+$ogImageUrl = asset_url('/assets/images/ogp/default.png');
 ?>
 <!DOCTYPE html>
 <html lang="ja">
