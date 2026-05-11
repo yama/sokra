@@ -13,8 +13,8 @@ async function sendMessage(page, text) {
 }
 
 async function readLastAiText(page) {
-    const count = await page.locator(".msg.ai .bubble").count();
-    return await page.locator(".msg.ai .bubble").nth(count - 1).innerText();
+    // ストリーミング中は親要素に aria-hidden="true" が付く。完成済みバブルのみ対象にする
+    return await page.locator(".msg.ai:not([aria-hidden]) .bubble").last().innerText();
 }
 
 async function waitForAiTextChange(page, previousText) {
@@ -50,7 +50,7 @@ async function startInterview(page) {
     await choose(page, "仕事終わり");
     await choose(page, "まあまあ");
     await expect(page.locator("#userInput")).toBeVisible();
-    await expect(page.locator(".msg.ai .bubble").last()).toContainText("印象に残っていること");
+    await expect(page.locator(".msg.ai:not([aria-hidden]) .bubble").last()).toContainText("印象に残っていること");
 }
 
 async function currentSession(page) {
@@ -187,7 +187,7 @@ test.describe("interview runtime", () => {
 
         expect(geminiCalls).toHaveLength(4); // 3 conversation turns + 1 closing summary
         expect(geminiCalls[0].responseMimeType).toBe("application/json");
-        expect(geminiCalls[0].systemPrompt).toContain("ターンの例");
+        expect(geminiCalls[0].systemPrompt).toContain("相づちについて");
         expect(geminiCalls[0].systemPrompt).toContain("現在の状態");
         expect(geminiCalls[0].systemPrompt).toContain("論点はノルマではありません");
 

@@ -57,7 +57,7 @@ function parseGeminiResponse(rawText, checkpoints) {
         text,
         checkpoints_filled: validateCheckpointsFilled(parsed.checkpoints_filled, checkpoints),
         is_done: parsed.is_done === true,
-        has_question: parsed.has_question !== false,
+        has_question: typeof parsed.has_question === "boolean" ? parsed.has_question : true,
     };
 }
 

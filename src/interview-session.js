@@ -117,15 +117,30 @@ export class InterviewSession {
         } catch (e) {
             pushSessionEvent({ role: "system", type: "followup_error", message: e.message }).catch(() => {});
         } finally {
-            this._isBusy = false;
-            document.getElementById("sendBtn").disabled = false;
+            // token が変わっていれば別の処理が _isBusy を引き継いでいる
+            if (token === this._followupToken) {
+                this._isBusy = false;
+                document.getElementById("sendBtn").disabled = false;
+            }
         }
     }
 
     // --- Topic switch（「話題を変えて」ボタン） ---
 
     async _switchTopic() {
-        if (!this.isActive() || this._isBusy) return;
+        if (!this.isActive()) return;
+        if (this._isBusy) {
+            if (this._userTurnCount >= EARLY_CLOSE_TURNS) {
+                showEarlyCloseHint(
+                    () => this._switchTopic(),
+                    () => this._beginClosingPhase().catch(e => {
+                        pushSessionEvent({ role: "system", type: "closing_phase_error", message: e.message }).catch(() => {});
+                    })
+                );
+            }
+            return;
+        }
+        this._cancelFollowup();
         this._isBusy = true;
         document.getElementById("sendBtn").disabled = true;
         try {
@@ -178,6 +193,7 @@ export class InterviewSession {
 
     async _beginClosingPhase() {
         this._stopAbandonTimer();
+        this._cancelFollowup();
         this._phase = PHASES.CLOSING;
         removeEarlyCloseHint();
         hideComposer();

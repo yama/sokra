@@ -150,7 +150,7 @@ export function showEarlyCloseHint(onSwitchTopic, onClose) {
         btn.className = "choice-btn";
         btn.type = "button";
         btn.textContent = label;
-        btn.addEventListener("click", () => { removeEarlyCloseHint(); cb(); });
+        btn.addEventListener("click", () => { removeEarlyCloseHint(); Promise.resolve(cb()).catch(() => {}); });
         return btn;
     };
     el.append(mkBtn("話題を変えて", onSwitchTopic), mkBtn("このくらいで", onClose));

@@ -124,7 +124,7 @@ is_done: true のとき、text には短い別れの言葉を入れてくださ�
 
 {
   "reaction": "（相づちが自然なときのみ。不要なら省略）",
-  "text": "参加者への問いかけ（そのまま表示されます）",
+  "text": "参加者への問いかけ。is_done: true のときは別れの言葉（例: 「今日はありがとうございました。」）",
   "checkpoints_filled": ["impression", "practical"],
   "is_done": false,
   "has_question": true
@@ -132,6 +132,7 @@ is_done: true のとき、text には短い別れの言葉を入れてくださ�
 
 reaction は相づちが自然なときだけ入れてください。不要なら省略するか空文字列にしてください。
 text は問いかけの文だけを入れてください。相づちと問いかけを text に改行でつなげないでください。
+is_done: true のときは text に別れの言葉を入れ、has_question は false にしてください。
 checkpoints_filled には、今回の参加者発言で拾えた論点のIDだけを入れてください。なければ [] にしてください。
 has_question には、text が問いかけで終わっていれば true、そうでなければ false を入れてください。
 ${closingInstruction}${retryInstruction}`;
