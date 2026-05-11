@@ -142,6 +142,28 @@ export async function waitForChoice(prompt, choices) {
 export function showComposer() { document.getElementById("inputArea").style.display = "flex"; }
 export function hideComposer() { document.getElementById("inputArea").style.display = "none"; }
 
+export function showEarlyCloseHint(onSwitchTopic, onClose) {
+    const el = document.getElementById("earlyCloseHint");
+    if (!el || el.children.length) return;
+    const mkBtn = (label, cb) => {
+        const btn = document.createElement("button");
+        btn.className = "choice-btn";
+        btn.type = "button";
+        btn.textContent = label;
+        btn.addEventListener("click", () => { removeEarlyCloseHint(); cb(); });
+        return btn;
+    };
+    el.append(mkBtn("話題を変えて", onSwitchTopic), mkBtn("このくらいで", onClose));
+    el.style.display = "flex";
+}
+
+export function removeEarlyCloseHint() {
+    const el = document.getElementById("earlyCloseHint");
+    if (!el) return;
+    el.style.display = "none";
+    el.innerHTML = "";
+}
+
 export function renderChecklist(checkpoints) {
     document.getElementById("checkItems").innerHTML = checkpoints
         .map(c => `<div class="check-item ${c.done ? "done" : ""}">${c.label}</div>`)
