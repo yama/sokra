@@ -142,6 +142,12 @@ export async function waitForChoice(prompt, choices) {
 export function showComposer() { document.getElementById("inputArea").style.display = "flex"; }
 export function hideComposer() { document.getElementById("inputArea").style.display = "none"; }
 
+export function setDebugPanelVisible(isVisible) {
+    const panel = document.getElementById("debugPanel");
+    if (!panel) return;
+    panel.hidden = !isVisible;
+}
+
 export function showEarlyCloseHint(onSwitchTopic, onClose) {
     const el = document.getElementById("earlyCloseHint");
     if (!el || el.children.length) return;

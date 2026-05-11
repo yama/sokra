@@ -1,3 +1,11 @@
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/api/lib/bootstrap.php';
+
+$clientConfig = client_app_config();
+?>
 <!DOCTYPE html>
 <html lang="ja">
 
@@ -80,7 +88,9 @@
             </button>
         </div>
 
-        <div class="debug-panel">
+        <div class="debug-panel"
+             id="debugPanel"
+             <?= $clientConfig['debugEnabled'] ? '' : 'hidden' ?>>
             <div class="debug-title">通過地点（開発用表示）</div>
             <div class="check-items"
                  id="checkItems"></div>
@@ -93,6 +103,12 @@
         </div>
     </div>
 
+    <script>
+        window.__SOKRA_CONFIG__ = <?= json_encode(
+            $clientConfig,
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+        ) ?>;
+    </script>
     <script type="module" src="/app.js"></script>
 </body>
 

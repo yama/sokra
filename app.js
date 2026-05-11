@@ -1,9 +1,12 @@
 import { InterviewSession } from "./src/interview-session.js";
 import { getUsageSummary } from "./src/gemini.js";
-import { onUserTypingInput } from "./src/ui.js";
+import { onUserTypingInput, setDebugPanelVisible } from "./src/ui.js";
 
 const session = new InterviewSession();
 let isStarting = false;
+const appConfig = window.__SOKRA_CONFIG__ ?? {};
+
+setDebugPanelVisible(Boolean(appConfig.debugEnabled));
 
 document.getElementById("startBtn").addEventListener("click", async () => {
     if (isStarting) return;

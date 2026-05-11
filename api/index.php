@@ -2,12 +2,10 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/lib/env.php';
+require_once __DIR__ . '/lib/bootstrap.php';
 require_once __DIR__ . '/lib/http.php';
 require_once __DIR__ . '/lib/session.php';
 require_once __DIR__ . '/lib/gemini.php';
-
-load_env(__DIR__ . '/../.env');
 
 ensure_sessions_dir();
 
