@@ -258,7 +258,7 @@ AI に「未収集の論点があれば自然に移る」よう内部プロン�
 ### 放置タイマー
 
 CHAT・CLOSING フェーズ中に一定時間（`ABANDON_TIMER_MS`）無操作が続いたとき、`session_timeout` イベントを記録してセッションを自動終了させるタイマー。
-ユーザーメッセージかAI応答のたびにリセットされる。
+ゲストのメッセージ送信ごと、および自由会話フェーズ開始・クロージング移行時にリセットされる。
 
 - コード: `_resetAbandonTimer()` / `_onAbandon()`
 
@@ -285,15 +285,19 @@ AIが知覚を持っているように見える言い回しを使うこと。
 ### セッションイベント
 
 `pushSessionEvent()` で記録される会話・システムの各動作単位。
-`role`（user / ai / system）、`type`（イベント種別）、`text`（発言内容）、`seq`（連番）を持つ。
+`role`（user / ai / system）と `seq`（連番）を基本フィールドとして持つ。`type`（イベント種別）と `text`（発言内容）は任意で、イベントの種類によって付加される。
 
 - 例: `{ role: "ai", text: "…", type: "generated_turn" }`
+- 例: `{ role: "user", text: "仕事終わりです" }` — type なし
+- 例: `{ role: "system", type: "session_started", model: "…" }` — text なし
 - 備考: クライアントのメモリと `/api/session/:id/event` の両方に逐次保存される
 
-### 参加者コンテキスト
+### ゲストコンテキスト
 
 ボタンフェーズで収集した `format`（参加形式）/ `timing`（参加タイミング）/ `mood`（温度感）のセット。
 `sessionContext` としてセッション中保持され、システムプロンプトとログ（`seminar_context`）の両方に使われる。
+
+- 備考: コードの変数名 `sessionContext`・ログキー `seminar_context` はセミナー用途の現実装を反映した命名
 
 ### 用語方針
 
@@ -338,6 +342,6 @@ Gemini の返答JSONに含まれる、AIが「会話を終了してよい」と�
 
 - コード: `setSessionEndedNote()`
 
-### ログダウンロードボタン
+### 会話記録ダウンロードボタン
 
 セッション終了後にデバッグパネルに表示される、会話記録を JSON としてダウンロードするボタン（`#logBtn`）。
