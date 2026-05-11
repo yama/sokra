@@ -19,9 +19,18 @@ function buildConversationHistory(lastUserMessage) {
     const log = getSessionLog().slice();
     const last = log[log.length - 1];
     if (last?.role === "user" && last.text === lastUserMessage) log.pop();
-    return log
+    const entries = log
         .filter(e => ["user", "ai"].includes(e.role) && typeof e.text === "string")
         .map(e => ({ role: e.role === "ai" ? "assistant" : "user", content: e.text }));
+    return entries.reduce((acc, entry) => {
+        const prev = acc[acc.length - 1];
+        if (prev?.role === entry.role) {
+            prev.content += "\n" + entry.content;
+        } else {
+            acc.push({ ...entry });
+        }
+        return acc;
+    }, []);
 }
 
 function validateCheckpointsFilled(filled, checkpoints) {
@@ -44,9 +53,11 @@ function parseGeminiResponse(rawText, checkpoints) {
     const text = typeof parsed.text === "string" ? parsed.text.trim() : "";
     if (!text) throw new Error("response.text is required");
     return {
+        reaction: typeof parsed.reaction === "string" ? parsed.reaction.trim() : "",
         text,
         checkpoints_filled: validateCheckpointsFilled(parsed.checkpoints_filled, checkpoints),
-        is_done: parsed.is_done === true
+        is_done: parsed.is_done === true,
+        has_question: parsed.has_question !== false,
     };
 }
 
