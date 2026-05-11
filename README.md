@@ -78,7 +78,7 @@ Sokra は、会話の中で拾いたい論点を内部チェックリストと�
 
 ## 技術構成
 
-- **フロントエンド**: 素の HTML/CSS/JS（`index.html`、`styles.css`、`app.js` + `src/` 配下の ES Modules。ビルド不要）
+- **フロントエンド**: 素の PHP/HTML/CSS/JS（`index.php`、`styles.css`、`app.js` + `src/` 配下の ES Modules。ビルド不要）
 - **バックエンド**: PHP（`router.php`、`api/index.php`、`api/lib/*.php`）
 - **AI**: Gemini API（自由会話の発話生成、終了判定、チェックポイント更新）
 - **ログ形式**: `data/sessions/*.jsonl` へのサーバー側追記 + クライアント側 JSON ダウンロード
@@ -104,6 +104,9 @@ npm start
 `.env.example`:
 
 ```dotenv
+# development のときだけ開発用表示を出します
+APP_ENV=development
+
 # 自由会話フェーズで Gemini API を使います。
 # ローカルで通常のインタビューを動かす場合も設定してください。
 GEMINI_API_KEY=
@@ -116,7 +119,7 @@ GEMINI_API_KEY=
 ローカル開発では `router.php` がフロントエンド配信と API ルーティングを兼ねます。
 
 - `GET /`:
-  `index.html` を返す
+  `index.php` を返す
 - `POST /api/session/start`:
   セッション開始。`sessionId` を発行する
 - `POST /api/session/{sessionId}/event`:
@@ -132,12 +135,14 @@ GEMINI_API_KEY=
 
 - `/api/...` は `api/.htaccess` で `api/index.php` にルーティング
 - ルートの `.htaccess` でドット始まりファイルへの直アクセスを拒否
-- `.env` は `api/lib/env.php` から読み込む
+- `.env` は `api/lib/bootstrap.php` 経由で読み込む
+- `APP_ENV=development` のときだけ開発用表示を出す
 - セッションログは `data/sessions/*.jsonl` に保存されるため、書き込み権限が必要
 
 `.env` の例:
 
 ```dotenv
+APP_ENV=production
 GEMINI_API_KEY=your_api_key
 ```
 

@@ -13,6 +13,7 @@ description: AGENTS.md、CLAUDE.md、.github/copilot-instructions.md、AI 向け
 - AI 向け文書の改修で SSOT を壊さない
 - 重複、矛盾、更新漏れを減らす
 - 改修後のレビューラリーを短くする
+- 文書やスキルの入口だけ見ても、正本、参照先、責務分担が推測できる状態を保つ
 
 ## 対象
 
@@ -55,6 +56,7 @@ description: AGENTS.md、CLAUDE.md、.github/copilot-instructions.md、AI 向け
 - `skills/` に置くべき再利用可能な作業フロー
 
 迷った場合は、まず重複を増やさない配置を選ぶ。
+入口だけ読んだ AI が全体の流れを誤解しないかも、この時点で判断する。
 
 ### 3. 正本を先に直す
 
@@ -92,6 +94,7 @@ description: AGENTS.md、CLAUDE.md、.github/copilot-instructions.md、AI 向け
 - 例外条件が広すぎる
 - 「適宜」「必要に応じて」だけで判断基準がない
 - 参照先はあるが、いつ読むかが不明
+- 入口文書だけ見たときに、正本、参照先、責務分担が推測できない
 
 人間向けの自然さより、AI にとっての再現性を優先する。
 

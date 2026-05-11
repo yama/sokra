@@ -20,4 +20,4 @@ if ($path === '/api' || str_starts_with($path, '/api/')) {
     return true;
 }
 
-require __DIR__ . '/index.html';
+require __DIR__ . '/index.php';
