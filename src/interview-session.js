@@ -5,10 +5,13 @@ import {
     addMessage, speak, withTypingUntilMessage, removeTyping,
     showComposer, hideComposer, waitForChoice,
     renderChecklist, renderClosingAction, removeClosingAction,
-    setSessionEndedNote, renderUsageStats
+    setSessionEndedNote, renderUsageStats,
+    showEarlyCloseHint, removeEarlyCloseHint
 } from "./ui.js";
 
 const ABANDON_TIMER_MS = window.__SOKRA_ABANDON_MS__ || 5 * 60 * 1000;
+const FOLLOWUP_DELAY_MS = window.__SOKRA_FOLLOWUP_MS__ || 4000;
+const EARLY_CLOSE_TURNS = window.__SOKRA_EARLY_CLOSE_TURNS__ || 5;
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -23,6 +26,9 @@ export class InterviewSession {
         this._lastUserMessage = "";
         this._abandonTimer = null;
         this._abandonToken = 0;
+        this._followupToken = 0;
+        this._isBusy = false;
+        this._userTurnCount = 0;
     }
 
     // --- Stats ---
@@ -65,6 +71,110 @@ export class InterviewSession {
         await this._concludeSession({ logEvent: { role: "system", type: "session_timeout" } });
     }
 
+    // --- Follow-up timer（相づちのみで終わったとき問いかけを追加） ---
+
+    _cancelFollowup() {
+        this._followupToken++;
+    }
+
+    _scheduleFollowup(hasQuestion, text) {
+        if (hasQuestion && (text.includes('？') || text.includes('?'))) return;
+        this._cancelFollowup();
+        const token = this._followupToken;
+        setTimeout(() => this._sendFollowup(token), FOLLOWUP_DELAY_MS);
+    }
+
+    async _sendFollowup(token) {
+        if (token !== this._followupToken || this._phase !== PHASES.CHAT || this._isBusy) return;
+        const input = document.getElementById("userInput");
+        if (input?.value.trim()) return;
+        this._isBusy = true;
+        document.getElementById("sendBtn").disabled = true;
+        try {
+            const prompt = "内部指示: 直前の応答が相づちのみになってしまいました。前のメッセージを繰り返さず、参加者に続きを促す短い問いかけを1文だけ送ってください。";
+            const context = {
+                model: this.model,
+                sessionContext: this.sessionContext,
+                checkpoints: this.checkpoints,
+                lastUserMessage: this._lastUserMessage,
+                inClosingPhase: false,
+            };
+            const turn = await withTypingUntilMessage(() => generateInterviewTurn(prompt, context));
+            if (!this.isActive() || token !== this._followupToken) { removeTyping(); return; }
+            this.markCheckpoints(turn.checkpoints_filled);
+            if (turn.reaction) {
+                await this._speakAndLog(turn.reaction, { role: "ai", text: turn.reaction, type: "reaction" });
+            }
+            await this._speakAndLog(turn.text, {
+                role: "ai", text: turn.text, type: "followup_question",
+                answered_checkpoints: turn.checkpoints_filled, is_done: turn.is_done,
+            });
+            if (turn.is_done && this._phase === PHASES.CHAT) {
+                this._beginClosingPhase().catch(e => {
+                    pushSessionEvent({ role: "system", type: "closing_phase_error", message: e.message }).catch(() => {});
+                });
+            }
+        } catch (e) {
+            pushSessionEvent({ role: "system", type: "followup_error", message: e.message }).catch(() => {});
+        } finally {
+            // token が変わっていれば別の処理が _isBusy を引き継いでいる
+            if (token === this._followupToken) {
+                this._isBusy = false;
+                document.getElementById("sendBtn").disabled = false;
+            }
+        }
+    }
+
+    // --- Topic switch（「話題を変えて」ボタン） ---
+
+    async _switchTopic() {
+        if (!this.isActive()) return;
+        if (this._isBusy) {
+            if (this._userTurnCount >= EARLY_CLOSE_TURNS) {
+                showEarlyCloseHint(
+                    () => this._switchTopic(),
+                    () => this._beginClosingPhase().catch(e => {
+                        pushSessionEvent({ role: "system", type: "closing_phase_error", message: e.message }).catch(() => {});
+                    })
+                );
+            }
+            return;
+        }
+        this._cancelFollowup();
+        this._isBusy = true;
+        document.getElementById("sendBtn").disabled = true;
+        try {
+            const prompt = "内部指示: 参加者が話題の切り替えを希望しています。未収集の論点があれば自然に移ってください。なければ別の角度から聞いてみてください。";
+            const context = {
+                model: this.model,
+                sessionContext: this.sessionContext,
+                checkpoints: this.checkpoints,
+                lastUserMessage: this._lastUserMessage,
+                inClosingPhase: false,
+            };
+            const turn = await withTypingUntilMessage(() => generateInterviewTurn(prompt, context));
+            if (!this.isActive()) { removeTyping(); return; }
+            this.markCheckpoints(turn.checkpoints_filled);
+            if (turn.reaction) {
+                await this._speakAndLog(turn.reaction, { role: "ai", text: turn.reaction, type: "reaction" });
+            }
+            await this._speakAndLog(turn.text, {
+                role: "ai", text: turn.text, type: "topic_switch",
+                answered_checkpoints: turn.checkpoints_filled, is_done: turn.is_done,
+            });
+            if (turn.is_done && this._phase === PHASES.CHAT) {
+                this._beginClosingPhase().catch(e => {
+                    pushSessionEvent({ role: "system", type: "closing_phase_error", message: e.message }).catch(() => {});
+                });
+            }
+        } catch (e) {
+            pushSessionEvent({ role: "system", type: "topic_switch_error", message: e.message }).catch(() => {});
+        } finally {
+            this._isBusy = false;
+            document.getElementById("sendBtn").disabled = false;
+        }
+    }
+
     // --- AI speaking with logging ---
 
     async _speakAndLog(text, logEvent, { allowLogFailure = false } = {}) {
@@ -83,7 +193,9 @@ export class InterviewSession {
 
     async _beginClosingPhase() {
         this._stopAbandonTimer();
+        this._cancelFollowup();
         this._phase = PHASES.CLOSING;
+        removeEarlyCloseHint();
         hideComposer();
 
         await sleep(500);
@@ -129,6 +241,7 @@ export class InterviewSession {
         this._stopAbandonTimer();
         removeTyping();
         removeClosingAction();
+        removeEarlyCloseHint();
         hideComposer();
         setSessionEndedNote("話してくれてありがとうございました。");
         document.getElementById("logBtn").style.display = "inline-block";
@@ -147,9 +260,12 @@ export class InterviewSession {
     async onUserMessage(text) {
         const normalizedText = text.trim();
         if (!normalizedText || !this.isActive()) return;
+        this._cancelFollowup();
         this._resetAbandonTimer();
+        this._userTurnCount++;
         this._lastUserMessage = normalizedText;
         addMessage("user", normalizedText);
+        this._isBusy = true;
         document.getElementById("sendBtn").disabled = true;
         try {
             await pushSessionEvent({ role: "user", text: normalizedText });
@@ -163,6 +279,9 @@ export class InterviewSession {
             const turn = await withTypingUntilMessage(() => generateInterviewTurn(normalizedText, context));
             if (!this.isActive()) { removeTyping(); return; }
             this.markCheckpoints(turn.checkpoints_filled);
+            if (turn.reaction) {
+                await this._speakAndLog(turn.reaction, { role: "ai", text: turn.reaction, type: "reaction" });
+            }
             await this._speakAndLog(turn.text, {
                 role: "ai", text: turn.text, type: "generated_turn",
                 answered_checkpoints: turn.checkpoints_filled, is_done: turn.is_done,
@@ -171,6 +290,16 @@ export class InterviewSession {
                 this._beginClosingPhase().catch(e => {
                     pushSessionEvent({ role: "system", type: "closing_phase_error", message: e.message }).catch(() => {});
                 });
+            } else if (this._phase === PHASES.CHAT) {
+                this._scheduleFollowup(turn.has_question, turn.text);
+                if (this._userTurnCount >= EARLY_CLOSE_TURNS) {
+                    showEarlyCloseHint(
+                        () => this._switchTopic(),
+                        () => this._beginClosingPhase().catch(e => {
+                            pushSessionEvent({ role: "system", type: "closing_phase_error", message: e.message }).catch(() => {});
+                        })
+                    );
+                }
             }
         } catch (e) {
             pushSessionEvent({ role: "system", type: "ai_turn_error", message: e.message }).catch(() => {});
@@ -181,6 +310,7 @@ export class InterviewSession {
             );
             await this._concludeSession();
         } finally {
+            this._isBusy = false;
             document.getElementById("sendBtn").disabled = false;
         }
     }
