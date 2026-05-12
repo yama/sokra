@@ -19,7 +19,7 @@ export function buildSystemPrompt(sessionContext, checkpoints, retryReason = "",
 必要以上に話を広げず、自然に締めてください。
 
 必ずJSONで返してください:
-{"text": "参加者に伝える感想", "checkpoints_filled": [], "is_done": false}${retryInstruction}`;
+{"text": "参加者に伝える感想", "checkpoints_filled": [], "ready_to_close": false}${retryInstruction}`;
     }
     if (options.inClosingSummary) {
         const retryInstruction = retryReason
@@ -32,13 +32,13 @@ export function buildSystemPrompt(sessionContext, checkpoints, retryReason = "",
 評価や分析はせず、温かさと感謝が伝わる言葉にしてください。
 
 必ずJSONで返してください:
-{"text": "参加者に伝える言葉", "checkpoints_filled": [], "is_done": false}${retryInstruction}`;
+{"text": "参加者に伝える言葉", "checkpoints_filled": [], "ready_to_close": false}${retryInstruction}`;
     }
     const retryInstruction = retryReason
         ? `\n## 直前の応答エラー\n前回の応答は ${retryReason} でした。今回は説明、前置き、コードフェンスを含めず、JSONオブジェクトだけを返してください。\n`
         : "";
     const closingInstruction = options.inClosingPhase
-        ? `\n## 終了フェーズ\n参加者には終了ボタンが見えています。追加の発言があれば軽く受け止めてください。新しい話題は始めず、is_done は false にしてください。\n`
+        ? `\n## 終了フェーズ\n参加者には終了ボタンが見えています。追加の発言があれば軽く受け止めてください。新しい話題は始めず、ready_to_close は false にしてください。\n`
         : "";
 
     return `あなたは、セミナー参加者と雑談しながら感想を聞く聞き手です。
@@ -114,20 +114,20 @@ ${JSON.stringify(checkpoints, null, 2)}
 
 ## クロージングの流れ
 
-「会話として十分な記録が取れた」と判断したとき、いきなり is_done: true にせず、まず「締めの前置き」を1ターン送ってください（is_done: false）。
+「会話として十分な記録が取れた」と判断したとき、いきなり ready_to_close: true にせず、まず「締めの前置き」を1ターン送ってください（ready_to_close: false）。
 
 締めの前置きとは、まずお礼を伝えてボールを相手に渡す一言です。返答があれば軽く受け止めて締めます。返答がなくてもかまいません。
 例: 「今日はいろいろ話してくれてありがとうございました。何かあれば。」
 例: 「今日はお話聞かせてもらえてよかったです。言い残したことがあれば。」
 
-締めの前置きを送ったあと、参加者が返答したら軽く受け止めて is_done: true にしてください。
-会話履歴を見て、直前の AI 発話がすでに締めの前置きであれば、このターンで is_done: true にしてください。
+締めの前置きを送ったあと、参加者が返答したら軽く受け止めて ready_to_close: true にしてください。
+会話履歴を見て、直前の AI 発話がすでに締めの前置きであれば、このターンで ready_to_close: true にしてください。
 
-次の場合は締めの前置きを省略して is_done: true にしてかまいません:
+次の場合は締めの前置きを省略して ready_to_close: true にしてかまいません:
 - 参加者が「終わりにしたい」「やめたい」など終了の意思を明示した
 - 「噛み合っていない」「意味が分からない」などメタな発言で継続が難しい
 
-is_done: true のとき、text には短い別れの言葉を入れてください（例：「今日はありがとうございました。」）。
+ready_to_close: true のとき、text には短い別れの言葉を入れてください（例：「今日はありがとうございました。」）。
 自然に拾えなかった論点を埋めるためだけに会話を続けないでください。
 
 ---
@@ -138,15 +138,15 @@ is_done: true のとき、text には短い別れの言葉を入れてくださ�
 
 {
   "reaction": "（相づちが自然なときのみ。不要なら省略）",
-  "text": "参加者への問いかけ。is_done: true のときは別れの言葉（例: 「今日はありがとうございました。」）",
+  "text": "参加者への問いかけ。ready_to_close: true のときは別れの言葉（例: 「今日はありがとうございました。」）",
   "checkpoints_filled": ["impression", "practical"],
-  "is_done": false,
+  "ready_to_close": false,
   "has_question": true
 }
 
 reaction は相づちが自然なときだけ入れてください。不要なら省略するか空文字列にしてください。
 text は問いかけの文だけを入れてください。相づちと問いかけを text に改行でつなげないでください。
-is_done: true のときは text に別れの言葉を入れ、has_question は false にしてください。
+ready_to_close: true のときは text に別れの言葉を入れ、has_question は false にしてください。
 checkpoints_filled には、今回の参加者発言で拾えた論点のIDだけを入れてください。なければ [] にしてください。
 has_question には、text が問いかけで終わっていれば true、そうでなければ false を入れてください。
 ${closingInstruction}${retryInstruction}`;

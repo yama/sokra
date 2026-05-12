@@ -98,14 +98,14 @@ function defaultGeminiTurn(body) {
         return {
             text: "話してくれた内容がとても参考になりました。ありがとうございました。",
             checkpoints_filled: [],
-            is_done: false
+            ready_to_close: false
         };
     }
     if (body.requestKind === "closing_impression_summary") {
         return {
             text: "今日の話には、ちゃんと伝えたいことを持って来てくれた感じがありました。落ち着いた温度で話せたのが印象に残ります。",
             checkpoints_filled: [],
-            is_done: false
+            ready_to_close: false
         };
     }
 
@@ -145,7 +145,7 @@ function defaultGeminiTurn(body) {
             ? "そうなんですね。無理に広げなくて大丈夫です。参加したきっかけだけ、一言聞いてもいいですか？"
             : nextText[missing] || "ここまで聞かせてもらえれば十分です。今日はこのあたりで終わりにしましょう。",
         checkpoints_filled: filled,
-        is_done: isDone
+        ready_to_close: isDone
     };
 }
 
@@ -214,7 +214,7 @@ test.describe("interview runtime", () => {
         expect(events.filter(event => event.type === "warning")).toEqual([]);
         const lastGeneratedTurn = [...events].reverse().find(event => event.role === "ai" && event.type === "generated_turn");
         expect(lastGeneratedTurn?.answered_checkpoints).toEqual(["background"]);
-        expect(lastGeneratedTurn?.is_done).toBe(true);
+        expect(lastGeneratedTurn?.ready_to_close).toBe(true);
         expect(events.some(event => event.type === "closing_summary")).toBe(true);
         expect(events.some(event => event.type === "closing_impression_summary")).toBe(true);
         expect(events.some(event => event.type === "closing_guide")).toBe(true);
@@ -225,7 +225,7 @@ test.describe("interview runtime", () => {
         await mockGemini(page, body => ({
             text: "うんうん。どんな感じがしました？",
             checkpoints_filled: ["temperature", "unknown", "impression", "impression"],
-            is_done: false
+            ready_to_close: false
         }));
         await startInterview(page);
 
@@ -242,7 +242,7 @@ test.describe("interview runtime", () => {
             return {
                 text: "うんうん。どんな感じがしました？",
                 checkpoints_filled: ["impression"],
-                is_done: false
+                ready_to_close: false
             };
         });
         await startInterview(page);
@@ -260,7 +260,7 @@ test.describe("interview runtime", () => {
             return {
                 text: "あー、なるほど。印象に残っている話があれば、そこから聞かせてください。",
                 checkpoints_filled: ["background"],
-                is_done: false
+                ready_to_close: false
             };
         });
         await startInterview(page);
@@ -296,7 +296,7 @@ test.describe("interview runtime", () => {
         await mockGemini(page, () => ({
             text: "うんうん、なるほど。どんなところが印象に残りましたか？",
             checkpoints_filled: [],
-            is_done: false
+            ready_to_close: false
         }));
         await startInterview(page);
 
@@ -323,7 +323,7 @@ test.describe("interview runtime", () => {
                     text: JSON.stringify({
                         text: "遅すぎる返答です",
                         checkpoints_filled: [],
-                        is_done: false
+                        ready_to_close: false
                     }),
                     usage: { promptTokenCount: 10, outputTokenCount: 5, totalTokenCount: 15 },
                     finishReason: "STOP",
@@ -350,7 +350,7 @@ test.describe("interview runtime", () => {
         expect(events.some(event => event.type === "chat_failure_abort")).toBe(true);
     });
 
-    test("low-energy answer can end via Gemini is_done without all checkpoints", async ({ page }) => {
+    test("low-energy answer can end via Gemini ready_to_close without all checkpoints", async ({ page }) => {
         await mockGemini(page);
         await startInterview(page);
 
@@ -363,7 +363,7 @@ test.describe("interview runtime", () => {
 
         const { events } = await currentSession(page);
         const lastGeneratedTurn = [...events].reverse().find(event => event.role === "ai" && event.type === "generated_turn");
-        expect(lastGeneratedTurn?.is_done).toBe(true);
+        expect(lastGeneratedTurn?.ready_to_close).toBe(true);
     });
 
     test("meta complaint is sent to Gemini and can trigger closing", async ({ page }) => {
@@ -372,13 +372,13 @@ test.describe("interview runtime", () => {
                 return {
                     text: "仕事や普段の場面にもつながりそうですか？",
                     checkpoints_filled: ["impression"],
-                    is_done: false
+                    ready_to_close: false
                 };
             }
             return {
                 text: "噛み合っていない感じになってしまいましたね。ここでいったん止めます。",
                 checkpoints_filled: [],
-                is_done: true
+                ready_to_close: true
             };
         });
         await startInterview(page);
@@ -394,6 +394,6 @@ test.describe("interview runtime", () => {
 
         const { events } = await currentSession(page);
         const lastGeneratedTurn = [...events].reverse().find(event => event.role === "ai" && event.type === "generated_turn");
-        expect(lastGeneratedTurn?.is_done).toBe(true);
+        expect(lastGeneratedTurn?.ready_to_close).toBe(true);
     });
 });

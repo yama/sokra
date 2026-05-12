@@ -56,7 +56,7 @@ function parseGeminiResponse(rawText, checkpoints) {
         reaction: typeof parsed.reaction === "string" ? parsed.reaction.trim() : "",
         text,
         checkpoints_filled: validateCheckpointsFilled(parsed.checkpoints_filled, checkpoints),
-        is_done: parsed.is_done === true,
+        ready_to_close: parsed.ready_to_close === true,
         has_question: typeof parsed.has_question === "boolean" ? parsed.has_question : true,
     };
 }

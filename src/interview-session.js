@@ -108,9 +108,9 @@ export class InterviewSession {
             }
             await this._speakAndLog(turn.text, {
                 role: "ai", text: turn.text, type: "followup_question",
-                answered_checkpoints: turn.checkpoints_filled, is_done: turn.is_done,
+                answered_checkpoints: turn.checkpoints_filled, ready_to_close: turn.ready_to_close,
             });
-            if (turn.is_done && this._phase === PHASES.CHAT) {
+            if (turn.ready_to_close && this._phase === PHASES.CHAT) {
                 this._beginClosingPhase().catch(e => {
                     pushSessionEvent({ role: "system", type: "closing_phase_error", message: e.message }).catch(() => {});
                 });
@@ -162,9 +162,9 @@ export class InterviewSession {
             }
             await this._speakAndLog(turn.text, {
                 role: "ai", text: turn.text, type: "topic_switch",
-                answered_checkpoints: turn.checkpoints_filled, is_done: turn.is_done,
+                answered_checkpoints: turn.checkpoints_filled, ready_to_close: turn.ready_to_close,
             });
-            if (turn.is_done && this._phase === PHASES.CHAT) {
+            if (turn.ready_to_close && this._phase === PHASES.CHAT) {
                 this._beginClosingPhase().catch(e => {
                     pushSessionEvent({ role: "system", type: "closing_phase_error", message: e.message }).catch(() => {});
                 });
@@ -325,10 +325,10 @@ export class InterviewSession {
             }
             await this._speakAndLog(turn.text, {
                 role: "ai", text: turn.text, type: "generated_turn",
-                answered_checkpoints: turn.checkpoints_filled, is_done: turn.is_done,
+                answered_checkpoints: turn.checkpoints_filled, ready_to_close: turn.ready_to_close,
             });
             if (this._phase === PHASES.CLOSING) this._renderClosingAction();
-            if (turn.is_done && this._phase === PHASES.CHAT) {
+            if (turn.ready_to_close && this._phase === PHASES.CHAT) {
                 this._beginClosingPhase().catch(e => {
                     pushSessionEvent({ role: "system", type: "closing_phase_error", message: e.message }).catch(() => {});
                 });
