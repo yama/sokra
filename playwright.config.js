@@ -18,6 +18,7 @@ module.exports = defineConfig({
     },
     webServer: {
         command: "npm run start:e2e",
+        env: { SOKRA_TEST_PORT: String(TEST_PORT) },
         url: BASE_URL,
         reuseExistingServer: false,
         timeout: 120000
