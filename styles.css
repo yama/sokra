@@ -241,8 +241,9 @@ body {
 }
 
 .choice-btn {
-    padding: 9px 18px;
-    border-radius: 20px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    line-height: 1;
     border: 1.5px solid var(--accent);
     background: var(--surface);
     color: var(--accent-dark);
