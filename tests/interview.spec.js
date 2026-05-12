@@ -182,10 +182,20 @@ test.describe("interview runtime", () => {
         reply = await sendAndReadReply(page, "社内で案内があったので来ました");
         expect(reply).toContain("終わりにしましょう");
         await expect(page.locator(".closing-action")).toBeVisible();
+        await page.getByRole("button", { name: "要約を表示する" }).click();
+        await expect(page.locator("#typingIndicator")).toHaveCount(0);
+        await expect(page.locator("#closingSummaryModal")).toBeVisible();
+        await expect(page.locator("#closingSummaryText")).toContainText("ありがとうございました");
+        await page.locator("#summaryModalClose").click();
+        await expect(page.locator("#closingSummaryModal")).toBeHidden();
+        reply = await sendAndReadReply(page, "そう言ってもらえると少し安心しました");
+        expect(reply).not.toEqual("");
+        await expect(page.locator(".closing-action")).toBeVisible();
+        await expect(page.locator(".closing-action")).toHaveCount(1);
         await expect(page.locator("#endedNote")).toBeHidden();
         await finishInterview(page);
 
-        expect(geminiCalls).toHaveLength(4); // 3 conversation turns + 1 closing summary
+        expect(geminiCalls).toHaveLength(6); // 3 conversation turns + 1 closing summary + 1 impression summary + 1 closing-phase reply
         expect(geminiCalls[0].responseMimeType).toBe("application/json");
         expect(geminiCalls[0].systemPrompt).toContain("相づちについて");
         expect(geminiCalls[0].systemPrompt).toContain("現在の状態");
@@ -198,6 +208,7 @@ test.describe("interview runtime", () => {
         expect(lastGeneratedTurn?.answered_checkpoints).toEqual(["background"]);
         expect(lastGeneratedTurn?.is_done).toBe(true);
         expect(events.some(event => event.type === "closing_summary")).toBe(true);
+        expect(events.some(event => event.type === "closing_impression_summary")).toBe(true);
         expect(events.some(event => event.type === "closing_guide")).toBe(true);
         expect(events.some(event => event.type === "session_completed_by_user")).toBe(true);
     });
