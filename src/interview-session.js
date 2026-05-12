@@ -5,7 +5,7 @@ import {
     addMessage, speak, withTypingUntilMessage, removeTyping,
     showComposer, hideComposer, waitForChoice,
     renderChecklist, renderClosingAction, removeClosingAction,
-    setSessionEndedNote, renderUsageStats,
+    renderTimeoutAction, removeTimeoutAction, setSessionEndedNote, renderUsageStats,
     showEarlyCloseHint, removeEarlyCloseHint, setEarlyCloseHintDisabled,
     showClosingSummaryModal
 } from "./ui.js";
@@ -69,7 +69,18 @@ export class InterviewSession {
 
     async _onAbandon(token) {
         if (token !== this._abandonToken || (this._phase !== PHASES.CHAT && this._phase !== PHASES.CLOSING)) return;
-        await this._concludeSession({ logEvent: { role: "system", type: "session_timeout" } });
+        if (this._phase === PHASES.CLOSING) {
+            await this._concludeSession({
+                logEvent: { role: "system", type: "session_timeout_closing" },
+                endedNote: "会話を終了として記録しました。ありがとうございました。"
+            });
+            return;
+        }
+        await this._concludeSession({
+            logEvent: { role: "system", type: "session_timeout_chat" },
+            endedNote: "会話が中断されました。ここまでの記録は保存されています。",
+            showRestartAction: true
+        });
     }
 
     // --- Follow-up timer（相づちのみで終わったとき問いかけを追加） ---
@@ -108,9 +119,9 @@ export class InterviewSession {
             }
             await this._speakAndLog(turn.text, {
                 role: "ai", text: turn.text, type: "followup_question",
-                answered_checkpoints: turn.checkpoints_filled, is_done: turn.is_done,
+                answered_checkpoints: turn.checkpoints_filled, ready_to_close: turn.ready_to_close,
             });
-            if (turn.is_done && this._phase === PHASES.CHAT) {
+            if (turn.ready_to_close && this._phase === PHASES.CHAT) {
                 this._beginClosingPhase().catch(e => {
                     pushSessionEvent({ role: "system", type: "closing_phase_error", message: e.message }).catch(() => {});
                 });
@@ -162,9 +173,9 @@ export class InterviewSession {
             }
             await this._speakAndLog(turn.text, {
                 role: "ai", text: turn.text, type: "topic_switch",
-                answered_checkpoints: turn.checkpoints_filled, is_done: turn.is_done,
+                answered_checkpoints: turn.checkpoints_filled, ready_to_close: turn.ready_to_close,
             });
-            if (turn.is_done && this._phase === PHASES.CHAT) {
+            if (turn.ready_to_close && this._phase === PHASES.CHAT) {
                 this._beginClosingPhase().catch(e => {
                     pushSessionEvent({ role: "system", type: "closing_phase_error", message: e.message }).catch(() => {});
                 });
@@ -274,15 +285,31 @@ export class InterviewSession {
         }
     }
 
-    async _concludeSession({ logEvent } = {}) {
+    async _concludeSession({ logEvent, endedNote, showRestartAction = false } = {}) {
         if (this._phase === PHASES.ENDED) return;
         this._phase = PHASES.ENDED;
         this._stopAbandonTimer();
         removeTyping();
         removeClosingAction();
+        removeTimeoutAction();
         removeEarlyCloseHint();
         hideComposer();
-        setSessionEndedNote("話してくれてありがとうございました。");
+        setSessionEndedNote(endedNote ?? "話してくれてありがとうございました。");
+        if (!showRestartAction && endedNote) {
+            addMessage("ai", endedNote);
+        }
+        if (showRestartAction) {
+            renderTimeoutAction({
+                message: "終了判定前に会話が止まりました。インタビューをやり直しますか？",
+                primaryLabel: "もう一度はじめる",
+                secondaryLabel: "今回は終了",
+                onPrimary: () => window.location.reload(),
+                onSecondary: () => {
+                    addMessage("ai", endedNote ?? "話してくれてありがとうございました。");
+                    removeTimeoutAction();
+                },
+            });
+        }
         document.getElementById("logBtn").style.display = "inline-block";
         if (logEvent) {
             try { await pushSessionEvent(logEvent); } catch { /* ログ失敗は usageStats に表示される */ }
@@ -325,10 +352,10 @@ export class InterviewSession {
             }
             await this._speakAndLog(turn.text, {
                 role: "ai", text: turn.text, type: "generated_turn",
-                answered_checkpoints: turn.checkpoints_filled, is_done: turn.is_done,
+                answered_checkpoints: turn.checkpoints_filled, ready_to_close: turn.ready_to_close,
             });
             if (this._phase === PHASES.CLOSING) this._renderClosingAction();
-            if (turn.is_done && this._phase === PHASES.CHAT) {
+            if (turn.ready_to_close && this._phase === PHASES.CHAT) {
                 this._beginClosingPhase().catch(e => {
                     pushSessionEvent({ role: "system", type: "closing_phase_error", message: e.message }).catch(() => {});
                 });
@@ -388,6 +415,7 @@ export class InterviewSession {
     async start(model) {
         this.model = model;
         removeClosingAction();
+        removeTimeoutAction();
         setSessionEndedNote("");
 
         await startServerSession(this.model);

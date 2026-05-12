@@ -170,7 +170,7 @@ AIの返答テキストを1文字ずつ順に表示していく演出。
 | クロージング | `CLOSING` | 終了フェーズ中 |
 | 終了 | `ENDED` | セッション終了 |
 
-- 備考: 通常は `START` → `BUTTONS` → `CHAT` → `CLOSING` → `ENDED` の順だが、放置タイマーによる `session_timeout` やエラーによる `chat_failure_abort` などでは `CLOSING` を経ずに `ENDED` へ直行する
+- 備考: 通常は `START` → `BUTTONS` → `CHAT` → `CLOSING` → `ENDED` の順だが、放置タイマーによる `session_timeout_chat` やエラーによる `chat_failure_abort` などでは `CLOSING` を経ずに `ENDED` へ直行する
 
 ### 通過地点
 
@@ -196,7 +196,7 @@ AI に「未収集の論点があれば自然に移る」よう内部プロン�
 
 ### 放置タイマー
 
-CHAT・CLOSING フェーズ中に一定時間（`ABANDON_TIMER_MS`）無操作が続いたとき、`session_timeout` イベントを記録してセッションを自動終了させるタイマー。
+CHAT・CLOSING フェーズ中に一定時間（`ABANDON_TIMER_MS`）無操作が続いたとき、`session_timeout_chat` または `session_timeout_closing` イベントを記録してセッションを自動終了させるタイマー。
 ゲストのメッセージ送信ごと、および自由会話フェーズ開始時・クロージングフェーズで終了ボタン表示後にリセットされる。
 クロージング移行の冒頭では一旦停止し、ガイドメッセージと終了ボタンを表示したあとに再開する。
 
@@ -264,12 +264,12 @@ AIが知覚を持っているように見える言い回しを使うこと。
 
 - 例: サーバー起動ログ、APIエラーログ、デバッグ出力
 
-### is_done
+### ready_to_close
 
 Gemini の返答JSONに含まれる、AIが「会話を終了してよい」と判断したことを示すフィールド。
 `true` のとき `_beginClosingPhase()` が呼ばれ、クロージングフェーズに遷移する。セッションの完了ではなく「終了を提案する」シグナルである点に注意。
 
-- 備考: 命名がPIE原則に照らして不正確（「完了した」と読めるが実態は「終了提案」）。候補: `ready_to_close`、`suggest_close`、`can_end`
+- 備考: 旧名称 `is_done` から改名済み。会話完了ではなく「終了提案」の意味を表す。
 
 ### 使用量表示
 
