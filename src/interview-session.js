@@ -6,7 +6,8 @@ import {
     showComposer, hideComposer, waitForChoice,
     renderChecklist, renderClosingAction, removeClosingAction,
     setSessionEndedNote, renderUsageStats,
-    showEarlyCloseHint, removeEarlyCloseHint
+    showEarlyCloseHint, removeEarlyCloseHint, setEarlyCloseHintDisabled,
+    showClosingSummaryModal
 } from "./ui.js";
 
 const ABANDON_TIMER_MS = window.__SOKRA_ABANDON_MS__ || 5 * 60 * 1000;
@@ -143,6 +144,7 @@ export class InterviewSession {
         this._cancelFollowup();
         this._isBusy = true;
         document.getElementById("sendBtn").disabled = true;
+        setEarlyCloseHintDisabled(true);
         try {
             const prompt = "内部指示: 参加者が話題の切り替えを希望しています。未収集の論点があれば自然に移ってください。なければ別の角度から聞いてみてください。";
             const context = {
@@ -172,6 +174,7 @@ export class InterviewSession {
         } finally {
             this._isBusy = false;
             document.getElementById("sendBtn").disabled = false;
+            if (this._phase === PHASES.CHAT) setEarlyCloseHintDisabled(false);
         }
     }
 
@@ -187,6 +190,42 @@ export class InterviewSession {
             }
         }
         this.refreshStats();
+    }
+
+    _renderClosingAction() {
+        if (this._phase !== PHASES.CLOSING) return;
+        renderClosingAction(
+            () => this._concludeSession({ logEvent: { role: "system", type: "session_completed_by_user" } }),
+            () => this._showClosingSummary()
+        );
+    }
+
+    async _showClosingSummary() {
+        if (this._phase !== PHASES.CLOSING || this._isBusy) return;
+        this._cancelFollowup();
+        this._resetAbandonTimer();
+        this._isBusy = true;
+        document.getElementById("sendBtn").disabled = true;
+        try {
+            const prompt = "内部指示: ここまでの会話を踏まえて、聞き手の感想として短い要約を2〜3文で作ってください。流れの事務的要約ではなく、参加者の言葉を受け止める温かいトーンで書いてください。最後は相手が自然に余韻を感じられるように、やわらかく締めてください。";
+            const turn = await generateInterviewTurn(prompt, {
+                model: this.model,
+                sessionContext: this.sessionContext,
+                checkpoints: this.checkpoints,
+                lastUserMessage: this._lastUserMessage,
+                inClosingPhase: true,
+                inClosingImpressionSummary: true,
+            });
+            if (this._phase !== PHASES.CLOSING) { removeTyping(); return; }
+            showClosingSummaryModal(turn.text);
+            await pushSessionEvent({ role: "ai", text: turn.text, type: "closing_impression_summary" }).catch(() => {});
+            this.refreshStats();
+        } catch (e) {
+            pushSessionEvent({ role: "system", type: "closing_impression_summary_error", message: e.message }).catch(() => {});
+        } finally {
+            this._isBusy = false;
+            document.getElementById("sendBtn").disabled = false;
+        }
     }
 
     // --- Phase transitions ---
@@ -230,7 +269,7 @@ export class InterviewSession {
                 role: "ai", text: guideText, type: "closing_guide",
             }, { allowLogFailure: true });
             showComposer();
-            renderClosingAction(() => this._concludeSession({ logEvent: { role: "system", type: "session_completed_by_user" } }));
+            this._renderClosingAction();
             this._resetAbandonTimer();
         }
     }
@@ -264,6 +303,8 @@ export class InterviewSession {
         this._resetAbandonTimer();
         this._userTurnCount++;
         this._lastUserMessage = normalizedText;
+        if (this._phase === PHASES.CLOSING) removeClosingAction();
+        if (this._phase === PHASES.CLOSING) removeEarlyCloseHint();
         addMessage("user", normalizedText);
         this._isBusy = true;
         document.getElementById("sendBtn").disabled = true;
@@ -286,6 +327,7 @@ export class InterviewSession {
                 role: "ai", text: turn.text, type: "generated_turn",
                 answered_checkpoints: turn.checkpoints_filled, is_done: turn.is_done,
             });
+            if (this._phase === PHASES.CLOSING) this._renderClosingAction();
             if (turn.is_done && this._phase === PHASES.CHAT) {
                 this._beginClosingPhase().catch(e => {
                     pushSessionEvent({ role: "system", type: "closing_phase_error", message: e.message }).catch(() => {});

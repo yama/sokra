@@ -409,6 +409,12 @@ body {
     line-height: 1.6;
 }
 
+.closing-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
 .finish-btn {
     align-self: flex-start;
     padding: 8px 16px;
@@ -426,6 +432,71 @@ body {
 .finish-btn:hover {
     background: var(--accent-bg);
     border-color: var(--accent);
+}
+
+.finish-btn.secondary {
+    background: transparent;
+}
+
+.summary-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+}
+
+.summary-modal__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(20, 31, 45, 0.45);
+}
+
+.summary-modal__dialog {
+    position: relative;
+    width: min(560px, calc(100% - 32px));
+    margin: 10vh auto 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.18);
+    padding: 18px 18px 16px;
+}
+
+.summary-modal__icon-close {
+    position: absolute;
+    right: 10px;
+    top: 10px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text2);
+    font-size: 18px;
+    cursor: pointer;
+}
+
+.summary-modal__title {
+    font-size: 18px;
+    color: var(--text);
+    margin-bottom: 10px;
+}
+
+.summary-modal__body {
+    font-size: 15px;
+    color: var(--text2);
+    line-height: 1.8;
+    white-space: pre-wrap;
+}
+
+.summary-modal__close-btn {
+    margin-top: 14px;
+    padding: 8px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    font-family: inherit;
+    cursor: pointer;
 }
 
 /* デバッグパネル */

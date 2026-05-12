@@ -7,6 +7,20 @@ function formatSeminarContext(sessionContext) {
 }
 
 export function buildSystemPrompt(sessionContext, checkpoints, retryReason = "", options = {}) {
+    if (options.inClosingImpressionSummary) {
+        const retryInstruction = retryReason
+            ? `\n前回の応答は ${retryReason} でした。説明や前置きを含めず、JSONオブジェクトだけを返してください。\n`
+            : "";
+        return `参加者との会話を受けて、聞き手としての短い感想を2〜3文で生成してください。
+
+流れを要約するのではなく、相手の話を受け止めた余韻が残る文章にしてください。
+温かく、やさしく、少しだけ間を残すような印象にしてください。
+評価や分析はせず、参加者が安心して読めるトーンにしてください。
+必要以上に話を広げず、自然に締めてください。
+
+必ずJSONで返してください:
+{"text": "参加者に伝える感想", "checkpoints_filled": [], "is_done": false}${retryInstruction}`;
+    }
     if (options.inClosingSummary) {
         const retryInstruction = retryReason
             ? `\n前回の応答は ${retryReason} でした。説明や前置きを含めず、JSONオブジェクトだけを返してください。\n`

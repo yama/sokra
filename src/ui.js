@@ -6,6 +6,13 @@ const prefersReducedMotion = () => window.matchMedia("(prefers-reduced-motion: r
 let typingIndicator = null;
 let typingStartedAt = 0;
 let lastTypingAt = 0;
+let closingActionNode = null;
+let closingSummaryModalNode = null;
+let closingSummaryTextNode = null;
+let closingSummaryCloseBtn = null;
+let closingSummaryPrimaryCloseBtn = null;
+let closingSummaryReturnFocus = null;
+let earlyCloseHintButtons = [];
 
 export function onUserTypingInput() {
     lastTypingAt = Date.now();
@@ -151,15 +158,22 @@ export function setDebugPanelVisible(isVisible) {
 export function showEarlyCloseHint(onSwitchTopic, onClose) {
     const el = document.getElementById("earlyCloseHint");
     if (!el || el.children.length) return;
-    const mkBtn = (label, cb) => {
+    const mkBtn = (label, cb, { hideOnClick = false } = {}) => {
         const btn = document.createElement("button");
         btn.className = "choice-btn";
         btn.type = "button";
         btn.textContent = label;
-        btn.addEventListener("click", () => { removeEarlyCloseHint(); Promise.resolve(cb()).catch(() => {}); });
+        btn.addEventListener("click", () => {
+            if (hideOnClick) removeEarlyCloseHint();
+            Promise.resolve(cb()).catch(() => {});
+        });
+        earlyCloseHintButtons.push(btn);
         return btn;
     };
-    el.append(mkBtn("話題を変えて", onSwitchTopic), mkBtn("このくらいで", onClose));
+    el.append(
+        mkBtn("話題を変えて", onSwitchTopic),
+        mkBtn("このくらいで", onClose, { hideOnClick: true })
+    );
     el.style.display = "flex";
 }
 
@@ -168,6 +182,13 @@ export function removeEarlyCloseHint() {
     if (!el) return;
     el.style.display = "none";
     el.innerHTML = "";
+    earlyCloseHintButtons = [];
+}
+
+export function setEarlyCloseHintDisabled(isDisabled) {
+    earlyCloseHintButtons.forEach(btn => {
+        btn.disabled = isDisabled;
+    });
 }
 
 export function renderChecklist(checkpoints) {
@@ -179,9 +200,74 @@ export function renderChecklist(checkpoints) {
         .join("");
 }
 
-let closingActionNode = null;
+function ensureClosingSummaryModal() {
+    if (closingSummaryModalNode) return;
+    const modal = document.createElement("div");
+    modal.className = "summary-modal";
+    modal.id = "closingSummaryModal";
+    modal.hidden = true;
+    modal.innerHTML = `
+        <div class="summary-modal__backdrop" data-close-summary-modal="true"></div>
+        <div class="summary-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="closingSummaryTitle">
+            <button class="summary-modal__icon-close" id="summaryModalIconClose" type="button" aria-label="閉じる">×</button>
+            <h2 class="summary-modal__title" id="closingSummaryTitle">聞き手の感想</h2>
+            <p class="summary-modal__body" id="closingSummaryText"></p>
+            <button class="summary-modal__close-btn" id="summaryModalClose" type="button">閉じる</button>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    closingSummaryModalNode = modal;
+    closingSummaryTextNode = modal.querySelector("#closingSummaryText");
+    closingSummaryCloseBtn = modal.querySelector("#summaryModalIconClose");
+    closingSummaryPrimaryCloseBtn = modal.querySelector("#summaryModalClose");
+    const close = () => closeClosingSummaryModal();
+    closingSummaryCloseBtn.addEventListener("click", close);
+    closingSummaryPrimaryCloseBtn.addEventListener("click", close);
+    modal.addEventListener("click", event => {
+        const target = event.target;
+        if (target instanceof HTMLElement && target.dataset.closeSummaryModal === "true") close();
+    });
+    document.addEventListener("keydown", event => {
+        if (!closingSummaryModalNode || closingSummaryModalNode.hidden) return;
+        if (event.key === "Escape") {
+            close();
+            return;
+        }
+        if (event.key !== "Tab") return;
+        const focusables = [...closingSummaryModalNode.querySelectorAll("button")]
+            .filter(el => !el.disabled);
+        if (!focusables.length) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        const active = document.activeElement;
+        if (event.shiftKey && active === first) {
+            last.focus();
+            event.preventDefault();
+        } else if (!event.shiftKey && active === last) {
+            first.focus();
+            event.preventDefault();
+        }
+    });
+}
 
-export function renderClosingAction(onFinish) {
+export function showClosingSummaryModal(text) {
+    ensureClosingSummaryModal();
+    closingSummaryReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closingSummaryTextNode.textContent = text;
+    closingSummaryModalNode.hidden = false;
+    closingSummaryCloseBtn.focus();
+}
+
+export function closeClosingSummaryModal() {
+    if (!closingSummaryModalNode) return;
+    closingSummaryModalNode.hidden = true;
+    if (closingSummaryReturnFocus && document.contains(closingSummaryReturnFocus)) {
+        closingSummaryReturnFocus.focus();
+    }
+    closingSummaryReturnFocus = null;
+}
+
+export function renderClosingAction(onFinish, onShowSummary) {
     removeClosingAction();
     const msgs = document.getElementById("messages");
     const row = document.createElement("div");
@@ -191,12 +277,20 @@ export function renderClosingAction(onFinish) {
     const hint = document.createElement("div");
     hint.className = "closing-note";
     hint.textContent = "もう話すことがなければ、下のボタンで閉じられます。";
-    const btn = document.createElement("button");
-    btn.className = "finish-btn";
-    btn.type = "button";
-    btn.textContent = "会話を終了する";
-    btn.addEventListener("click", onFinish);
-    card.append(hint, btn);
+    const actions = document.createElement("div");
+    actions.className = "closing-actions";
+    const summaryBtn = document.createElement("button");
+    summaryBtn.className = "finish-btn secondary";
+    summaryBtn.type = "button";
+    summaryBtn.textContent = "要約を表示する";
+    summaryBtn.addEventListener("click", onShowSummary);
+    const finishBtn = document.createElement("button");
+    finishBtn.className = "finish-btn";
+    finishBtn.type = "button";
+    finishBtn.textContent = "会話を終了する";
+    finishBtn.addEventListener("click", onFinish);
+    actions.append(summaryBtn, finishBtn);
+    card.append(hint, actions);
     row.appendChild(card);
     msgs.appendChild(row);
     closingActionNode = row;
@@ -205,6 +299,7 @@ export function renderClosingAction(onFinish) {
 
 export function removeClosingAction() {
     if (closingActionNode) { closingActionNode.remove(); closingActionNode = null; }
+    closeClosingSummaryModal();
 }
 
 export function setSessionEndedNote(text = "") {
