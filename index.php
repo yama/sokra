@@ -28,9 +28,6 @@ $ogImageUrl = asset_url('/assets/images/ogp/default.png');
     <meta name="twitter:title" content="セミナーインタビュー">
     <meta name="twitter:description" content="AI活用セミナーの参加者に、ソクラテスのように問いを重ねながら率直な感想を引き出しやすくするインタビューツールです。">
     <meta name="twitter:image" content="<?= htmlspecialchars($ogImageUrl, ENT_QUOTES, 'UTF-8') ?>">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/styles.css">
 </head>
 
