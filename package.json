@@ -4,6 +4,7 @@
     "version": "0.1.0",
     "scripts": {
         "start": "php -S 127.0.0.1:3000 router.php",
+        "start:e2e": "php -S 127.0.0.1:${SOKRA_TEST_PORT:-3000} router.php",
         "test:e2e": "playwright test"
     },
     "devDependencies": {

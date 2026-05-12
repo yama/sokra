@@ -17,8 +17,7 @@ module.exports = defineConfig({
         trace: "on-first-retry"
     },
     webServer: {
-        // 既定は 3000 固定。AI 自走テスト時のみ SOKRA_TEST_PORT で一時的に上書き可能
-        command: `php -S 127.0.0.1:${TEST_PORT} router.php`,
+        command: "npm run start:e2e",
         url: BASE_URL,
         reuseExistingServer: false,
         timeout: 120000
