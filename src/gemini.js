@@ -72,6 +72,10 @@ function wasEmojiUsedRecently(cooldownTurns = 2) {
     return reactions.slice(-cooldownTurns).some(hasEmoji);
 }
 
+function currentUserTurnIndex() {
+    return getSessionLog().filter(e => e?.role === "user" && typeof e.text === "string").length;
+}
+
 function parseGeminiResponse(rawText, checkpoints) {
     const parsed = JSON.parse(String(rawText || "").trim());
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
@@ -92,7 +96,7 @@ function parseGeminiResponse(rawText, checkpoints) {
 function normalizeReactionEmojiRhythm(turn, userText = "") {
     if (!turn.reaction || !hasEmoji(turn.reaction)) return turn;
     const inCooldown = wasEmojiUsedRecently(2);
-    const allowByChance = (simpleHash(`${userText}::${turn.reaction}`) % 10) < 6;
+    const allowByChance = (simpleHash(`${currentUserTurnIndex()}::${userText}::${turn.reaction}`) % 10) < 6;
     const keepEmoji = !inCooldown && allowByChance;
     return {
         ...turn,
