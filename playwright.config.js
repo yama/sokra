@@ -14,6 +14,7 @@ module.exports = defineConfig({
         trace: "on-first-retry"
     },
     webServer: {
+        // listen 失敗時の切り分けは docs/testing.md の「失敗時チェックリスト」を参照
         command: "npm start",
         url: "http://127.0.0.1:3000",
         reuseExistingServer: false,
