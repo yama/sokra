@@ -306,6 +306,7 @@ test.describe("interview runtime", () => {
         expect(reaction).toContain("😳😳😳");
         expect(followup).toContain("豚カツ");
         expect(followup).not.toContain("🍚");
+        expect(followup).not.toContain("😳😳😳");
     });
 
     test("abandon timer ends session after prolonged inactivity", async ({ page }) => {

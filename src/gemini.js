@@ -96,7 +96,7 @@ function normalizeReactionEmojiRhythm(turn, userText = "") {
     const keepEmoji = !inCooldown && allowByChance;
     return {
         ...turn,
-        reaction: keepEmoji ? turn.reaction : (stripEmoji(turn.reaction) || turn.reaction),
+        reaction: keepEmoji ? turn.reaction : stripEmoji(turn.reaction),
         text: stripEmoji(turn.text) || turn.text,
     };
 }
