@@ -288,6 +288,27 @@ test.describe("interview runtime", () => {
         expect(geminiCalls[0].systemPrompt).toContain("誘導になります");
     });
 
+    test("emoji burst can be limited to reaction bubble only", async ({ page }) => {
+        await mockGemini(page, () => ({
+            reaction: "豚カツ、ですか！😳😳😳",
+            text: "セミナーの内容で、具体的に豚カツを連想させるような話があったんでしょうか？🍚🍚🍚",
+            checkpoints_filled: [],
+            ready_to_close: false
+        }));
+        await startInterview(page);
+
+        await sendAndReadReply(page, "豚カツ");
+
+        const aiBubbles = page.locator(".msg.ai:not([aria-hidden]) .bubble");
+        const bubbleCount = await aiBubbles.count();
+        const reaction = await aiBubbles.nth(bubbleCount - 2).innerText();
+        const followup = await aiBubbles.nth(bubbleCount - 1).innerText();
+        expect(reaction).toContain("😳😳😳");
+        expect(followup).toContain("豚カツ");
+        expect(followup).not.toContain("🍚");
+        expect(followup).not.toContain("😳😳😳");
+    });
+
     test("abandon timer ends session after prolonged inactivity", async ({ page }) => {
         await page.addInitScript(() => {
             window.__SOKRA_ABANDON_MS__ = 1000;

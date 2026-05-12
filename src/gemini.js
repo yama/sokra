@@ -45,6 +45,37 @@ function validateCheckpointsFilled(filled, checkpoints) {
     });
 }
 
+function hasEmoji(text) {
+    return /[\p{Extended_Pictographic}\uFE0F]/u.test(text);
+}
+
+function stripEmoji(text) {
+    return text
+        .replace(/[\p{Extended_Pictographic}\uFE0F]/gu, "")
+        .replace(/[ \t]{2,}/g, " ")
+        .trim();
+}
+
+function simpleHash(text) {
+    let hash = 0;
+    for (let i = 0; i < text.length; i++) {
+        hash = ((hash << 5) - hash) + text.charCodeAt(i);
+        hash |= 0;
+    }
+    return Math.abs(hash);
+}
+
+function wasEmojiUsedRecently(cooldownTurns = 2) {
+    const reactions = getSessionLog()
+        .filter(e => e?.role === "ai" && e?.type === "reaction" && typeof e.text === "string")
+        .map(e => e.text);
+    return reactions.slice(-cooldownTurns).some(hasEmoji);
+}
+
+function currentUserTurnIndex() {
+    return getSessionLog().filter(e => e?.role === "user" && typeof e.text === "string").length;
+}
+
 function parseGeminiResponse(rawText, checkpoints) {
     const parsed = JSON.parse(String(rawText || "").trim());
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
@@ -52,12 +83,25 @@ function parseGeminiResponse(rawText, checkpoints) {
     }
     const text = typeof parsed.text === "string" ? parsed.text.trim() : "";
     if (!text) throw new Error("response.text is required");
+    const reaction = typeof parsed.reaction === "string" ? parsed.reaction.trim() : "";
     return {
-        reaction: typeof parsed.reaction === "string" ? parsed.reaction.trim() : "",
+        reaction,
         text,
         checkpoints_filled: validateCheckpointsFilled(parsed.checkpoints_filled, checkpoints),
         ready_to_close: parsed.ready_to_close === true,
         has_question: typeof parsed.has_question === "boolean" ? parsed.has_question : true,
+    };
+}
+
+function normalizeReactionEmojiRhythm(turn, userText = "") {
+    if (!turn.reaction || !hasEmoji(turn.reaction)) return turn;
+    const inCooldown = wasEmojiUsedRecently(2);
+    const allowByChance = (simpleHash(`${currentUserTurnIndex()}::${userText}::${turn.reaction}`) % 10) < 6;
+    const keepEmoji = !inCooldown && allowByChance;
+    return {
+        ...turn,
+        reaction: keepEmoji ? turn.reaction : stripEmoji(turn.reaction),
+        text: stripEmoji(turn.text) || turn.text,
     };
 }
 
@@ -125,14 +169,20 @@ async function requestGeminiTurn(userText, context, retryReason = "") {
 
 export async function generateInterviewTurn(userText, context) {
     try {
-        return parseGeminiResponse(await requestGeminiTurn(userText, context), context.checkpoints);
+        return normalizeReactionEmojiRhythm(
+            parseGeminiResponse(await requestGeminiTurn(userText, context), context.checkpoints),
+            userText
+        );
     } catch (firstError) {
         usageSummary.retries += 1;
         pushSessionEvent({ role: "system", type: "ai_turn_retry", reason: firstError.message }).catch(() => {});
         try {
-            return parseGeminiResponse(
-                await requestGeminiTurn(userText, context, firstError.message),
-                context.checkpoints
+            return normalizeReactionEmojiRhythm(
+                parseGeminiResponse(
+                    await requestGeminiTurn(userText, context, firstError.message),
+                    context.checkpoints
+                ),
+                userText
             );
         } catch (secondError) {
             throw new Error(`Gemini interview turn failed after retry: ${secondError.message}`);
