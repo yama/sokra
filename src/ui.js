@@ -333,6 +333,7 @@ export function renderTimeoutAction({ message, primaryLabel, secondaryLabel, onP
     row.appendChild(card);
     msgs.appendChild(row);
     timeoutActionNode = row;
+    primaryBtn.focus();
     scrollDown();
 }
 
