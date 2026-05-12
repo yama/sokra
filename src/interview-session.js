@@ -295,6 +295,9 @@ export class InterviewSession {
         removeEarlyCloseHint();
         hideComposer();
         setSessionEndedNote(endedNote ?? "話してくれてありがとうございました。");
+        if (!showRestartAction && endedNote) {
+            addMessage("ai", endedNote);
+        }
         if (showRestartAction) {
             renderTimeoutAction({
                 message: "終了判定前に会話が止まりました。インタビューをやり直しますか？",

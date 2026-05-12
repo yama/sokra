@@ -322,6 +322,7 @@ test.describe("interview runtime", () => {
 
         await expect(page.locator("#endedNote")).toContainText("終了として記録しました", { timeout: 5000 });
         await expect(page.getByRole("button", { name: "もう一度はじめる" })).toHaveCount(0);
+        await expect(page.getByRole("button", { name: "今回は終了" })).toHaveCount(0);
         await page.waitForTimeout(500);
 
         const { events } = await currentSession(page);
