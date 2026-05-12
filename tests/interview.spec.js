@@ -302,10 +302,32 @@ test.describe("interview runtime", () => {
 
         // ユーザーが応答しなければ abandonタイマーがセッションを終了する
         await expect(page.locator("#endedNote")).toBeVisible({ timeout: 5000 });
+        await expect(page.getByRole("button", { name: "もう一度はじめる" })).toBeVisible();
+        await expect(page.getByRole("button", { name: "今回は終了" })).toBeVisible();
         await page.waitForTimeout(500); // session_timeout イベントの永続化を待つ
 
         const { events } = await currentSession(page);
-        expect(events.some(event => event.type === "session_timeout")).toBe(true);
+        expect(events.some(event => event.type === "session_timeout_chat")).toBe(true);
+    });
+
+    test("abandon timer in closing phase records a closing timeout without restart action", async ({ page }) => {
+        await page.addInitScript(() => {
+            window.__SOKRA_ABANDON_MS__ = 1200;
+        });
+        await mockGemini(page);
+        await startInterview(page);
+
+        await sendAndReadReply(page, "文章を自動で整えるデモの話が印象的でした");
+        await sendAndReadReply(page, "社内の問い合わせ対応みたいな場面では使えるかもと思いました");
+        await sendAndReadReply(page, "社内で案内があったので来ました");
+        await expect(page.locator(".closing-action")).toBeVisible();
+
+        await expect(page.locator("#endedNote")).toContainText("終了として記録しました", { timeout: 5000 });
+        await expect(page.getByRole("button", { name: "もう一度はじめる" })).toHaveCount(0);
+        await page.waitForTimeout(500);
+
+        const { events } = await currentSession(page);
+        expect(events.some(event => event.type === "session_timeout_closing")).toBe(true);
     });
 
     test("Gemini timeout retries once and then aborts the chat", async ({ page }) => {

@@ -13,6 +13,7 @@ let closingSummaryCloseBtn = null;
 let closingSummaryPrimaryCloseBtn = null;
 let closingSummaryReturnFocus = null;
 let earlyCloseHintButtons = [];
+let timeoutActionNode = null;
 
 export function onUserTypingInput() {
     lastTypingAt = Date.now();
@@ -300,6 +301,43 @@ export function renderClosingAction(onFinish, onShowSummary) {
 export function removeClosingAction() {
     if (closingActionNode) { closingActionNode.remove(); closingActionNode = null; }
     closeClosingSummaryModal();
+}
+
+export function renderTimeoutAction({ message, primaryLabel, secondaryLabel, onPrimary, onSecondary }) {
+    removeTimeoutAction();
+    const msgs = document.getElementById("messages");
+    const row = document.createElement("div");
+    row.className = "msg ai timeout-action";
+    const card = document.createElement("div");
+    card.className = "closing-card";
+    const hint = document.createElement("div");
+    hint.className = "closing-note";
+    hint.textContent = message;
+    const actions = document.createElement("div");
+    actions.className = "closing-actions";
+
+    const primaryBtn = document.createElement("button");
+    primaryBtn.className = "finish-btn";
+    primaryBtn.type = "button";
+    primaryBtn.textContent = primaryLabel;
+    primaryBtn.addEventListener("click", onPrimary);
+
+    const secondaryBtn = document.createElement("button");
+    secondaryBtn.className = "finish-btn secondary";
+    secondaryBtn.type = "button";
+    secondaryBtn.textContent = secondaryLabel;
+    secondaryBtn.addEventListener("click", onSecondary);
+
+    actions.append(secondaryBtn, primaryBtn);
+    card.append(hint, actions);
+    row.appendChild(card);
+    msgs.appendChild(row);
+    timeoutActionNode = row;
+    scrollDown();
+}
+
+export function removeTimeoutAction() {
+    if (timeoutActionNode) { timeoutActionNode.remove(); timeoutActionNode = null; }
 }
 
 export function setSessionEndedNote(text = "") {
