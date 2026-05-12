@@ -340,7 +340,8 @@ export function renderTimeoutAction({ message, primaryLabel, secondaryLabel, onP
 export function removeTimeoutAction() {
     if (!timeoutActionNode) return;
     if (timeoutActionNode.contains(document.activeElement)) {
-        (document.getElementById("logBtn") ?? document.getElementById("messages"))?.focus();
+        const logBtn = document.getElementById("logBtn");
+        ((logBtn && logBtn.offsetParent !== null) ? logBtn : document.getElementById("messages"))?.focus();
     }
     timeoutActionNode.remove();
     timeoutActionNode = null;

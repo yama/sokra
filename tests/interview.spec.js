@@ -1,6 +1,7 @@
 const { test, expect } = require("@playwright/test");
 
-const SESSION_API_BASE = `http://127.0.0.1:${process.env.SOKRA_TEST_PORT || "3000"}`;
+const _rawTestPort = parseInt(process.env.SOKRA_TEST_PORT, 10);
+const SESSION_API_BASE = `http://127.0.0.1:${(_rawTestPort >= 1 && _rawTestPort <= 65535) ? _rawTestPort : 3000}`;
 
 async function choose(page, label) {
     await page.getByRole("button", { name: label, exact: true }).click();
@@ -304,7 +305,7 @@ test.describe("interview runtime", () => {
         await expect(page.locator("#endedNote")).toBeVisible({ timeout: 5000 });
         await expect(page.getByRole("button", { name: "もう一度はじめる" })).toBeVisible();
         await expect(page.getByRole("button", { name: "今回は終了" })).toBeVisible();
-        await page.waitForTimeout(500); // session_timeout イベントの永続化を待つ
+        await page.waitForTimeout(500); // session_timeout_chat イベントの永続化を待つ
 
         const { events } = await currentSession(page);
         expect(events.some(event => event.type === "session_timeout_chat")).toBe(true);
