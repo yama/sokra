@@ -51,7 +51,7 @@ async function startInterview(page) {
     await expect(page.locator(".msg.ai:not([aria-hidden]) .bubble").last()).toContainText("印象に残っていること");
 }
 
-async function currentSession(page) {
+async function currentSession(page, requireEvent = null) {
     const usageText = await page.locator("#usageStats").innerText();
     const sessionMatch = usageText.match(/セッションID: (sess_[^\s]+)/);
     expect(sessionMatch, "session id should be shown in usage stats").not.toBeNull();
@@ -64,6 +64,7 @@ async function currentSession(page) {
             const response = await page.request.get(sessionUrl);
             if (!response.ok()) return null;
             session = await response.json();
+            if (requireEvent && !session.events?.some(e => e.type === requireEvent)) return null;
             return session?.session_id || null;
         }, {
             message: "session api should return the saved session"
@@ -125,7 +126,7 @@ function defaultGeminiTurn(body) {
     ].join("\n");
     const lowEnergy = /特にない|特にはない/.test(allUserTexts);
     const backgroundDone = checkpointsAfter.some(cp => cp.id === "background" && cp.done);
-    const isDone = coreDone || (lowEnergy && backgroundDone);
+    const readyToClose = coreDone || (lowEnergy && backgroundDone);
 
     const missing = ["impression", "practical", "background"].find(id =>
         !checkpointsAfter.some(cp => cp.id === id && cp.done)
@@ -137,13 +138,13 @@ function defaultGeminiTurn(body) {
     };
 
     return {
-        text: isDone
+        text: readyToClose
             ? "ここまで聞かせてもらえれば十分です。今日はこのあたりで終わりにしましょう。"
             : lowEnergy && !backgroundDone
             ? "そうなんですね。無理に広げなくて大丈夫です。参加したきっかけだけ、一言聞いてもいいですか？"
             : nextText[missing] || "ここまで聞かせてもらえれば十分です。今日はこのあたりで終わりにしましょう。",
         checkpoints_filled: filled,
-        ready_to_close: isDone
+        ready_to_close: readyToClose
     };
 }
 
@@ -302,9 +303,7 @@ test.describe("interview runtime", () => {
         await expect(page.locator("#endedNote")).toBeVisible({ timeout: 5000 });
         await expect(page.getByRole("button", { name: "もう一度はじめる" })).toBeVisible();
         await expect(page.getByRole("button", { name: "今回は終了" })).toBeVisible();
-        await page.waitForTimeout(500); // session_timeout_chat イベントの永続化を待つ
-
-        const { events } = await currentSession(page);
+        const { events } = await currentSession(page, "session_timeout_chat");
         expect(events.some(event => event.type === "session_timeout_chat")).toBe(true);
     });
 
@@ -323,9 +322,7 @@ test.describe("interview runtime", () => {
         await expect(page.locator("#endedNote")).toContainText("終了として記録しました", { timeout: 5000 });
         await expect(page.getByRole("button", { name: "もう一度はじめる" })).toHaveCount(0);
         await expect(page.getByRole("button", { name: "今回は終了" })).toHaveCount(0);
-        await page.waitForTimeout(500);
-
-        const { events } = await currentSession(page);
+        const { events } = await currentSession(page, "session_timeout_closing");
         expect(events.some(event => event.type === "session_timeout_closing")).toBe(true);
     });
 
