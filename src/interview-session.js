@@ -301,7 +301,10 @@ export class InterviewSession {
                 primaryLabel: "もう一度はじめる",
                 secondaryLabel: "今回は終了",
                 onPrimary: () => window.location.reload(),
-                onSecondary: () => removeTimeoutAction(),
+                onSecondary: () => {
+                    addMessage("ai", endedNote ?? "話してくれてありがとうございました。");
+                    removeTimeoutAction();
+                },
             });
         }
         document.getElementById("logBtn").style.display = "inline-block";
