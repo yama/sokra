@@ -294,7 +294,7 @@ export class InterviewSession {
         removeTimeoutAction();
         removeEarlyCloseHint();
         hideComposer();
-        setSessionEndedNote(endedNote || "話してくれてありがとうございました。");
+        setSessionEndedNote(endedNote ?? "話してくれてありがとうございました。");
         if (showRestartAction) {
             renderTimeoutAction({
                 message: "終了判定前に会話が止まりました。インタビューをやり直しますか？",
