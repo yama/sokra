@@ -1,7 +1,4 @@
 const { defineConfig } = require("@playwright/test");
-const _rawPort = parseInt(process.env.SOKRA_TEST_PORT, 10);
-const TEST_PORT = (_rawPort >= 1 && _rawPort <= 65535) ? _rawPort : 3000;
-const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
 
 module.exports = defineConfig({
     testDir: "./tests",
@@ -12,14 +9,13 @@ module.exports = defineConfig({
         timeout: 10000
     },
     use: {
-        baseURL: BASE_URL,
+        baseURL: "http://127.0.0.1:3000",
         headless: true,
         trace: "on-first-retry"
     },
     webServer: {
-        command: "npm run start:e2e",
-        env: { SOKRA_TEST_PORT: String(TEST_PORT) },
-        url: BASE_URL,
+        command: "npm start",
+        url: "http://127.0.0.1:3000",
         reuseExistingServer: false,
         timeout: 120000
     }
