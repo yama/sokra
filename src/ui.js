@@ -338,7 +338,12 @@ export function renderTimeoutAction({ message, primaryLabel, secondaryLabel, onP
 }
 
 export function removeTimeoutAction() {
-    if (timeoutActionNode) { timeoutActionNode.remove(); timeoutActionNode = null; }
+    if (!timeoutActionNode) return;
+    if (timeoutActionNode.contains(document.activeElement)) {
+        (document.getElementById("logBtn") ?? document.getElementById("messages"))?.focus();
+    }
+    timeoutActionNode.remove();
+    timeoutActionNode = null;
 }
 
 export function setSessionEndedNote(text = "") {

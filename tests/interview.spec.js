@@ -1,6 +1,6 @@
 const { test, expect } = require("@playwright/test");
 
-const SESSION_API_BASE = "http://127.0.0.1:3000";
+const SESSION_API_BASE = `http://127.0.0.1:${process.env.SOKRA_TEST_PORT || "3000"}`;
 
 async function choose(page, label) {
     await page.getByRole("button", { name: label, exact: true }).click();
