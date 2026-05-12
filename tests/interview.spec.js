@@ -1,8 +1,5 @@
 const { test, expect } = require("@playwright/test");
 
-const _rawTestPort = parseInt(process.env.SOKRA_TEST_PORT, 10);
-const SESSION_API_BASE = `http://127.0.0.1:${(_rawTestPort >= 1 && _rawTestPort <= 65535) ? _rawTestPort : 3000}`;
-
 async function choose(page, label) {
     await page.getByRole("button", { name: label, exact: true }).click();
 }
@@ -60,7 +57,7 @@ async function currentSession(page) {
     expect(sessionMatch, "session id should be shown in usage stats").not.toBeNull();
 
     const sessionId = sessionMatch[1];
-    const sessionUrl = `${SESSION_API_BASE}/api/session/${sessionId}`;
+    const sessionUrl = `/api/session/${sessionId}`;
     let session = null;
     await expect
         .poll(async () => {
