@@ -101,6 +101,13 @@ function defaultGeminiTurn(body) {
             is_done: false
         };
     }
+    if (body.requestKind === "closing_impression_summary") {
+        return {
+            text: "今日の話には、ちゃんと伝えたいことを持って来てくれた感じがありました。落ち着いた温度で話せたのが印象に残ります。",
+            checkpoints_filled: [],
+            is_done: false
+        };
+    }
 
     const checkpoints = parseCheckpoints(String(body.systemPrompt || ""));
     const filled = inferCheckpoints(userText).filter(id =>
@@ -185,9 +192,10 @@ test.describe("interview runtime", () => {
         await page.getByRole("button", { name: "要約を表示する" }).click();
         await expect(page.locator("#typingIndicator")).toHaveCount(0);
         await expect(page.locator("#closingSummaryModal")).toBeVisible();
-        await expect(page.locator("#closingSummaryText")).toContainText("ありがとうございました");
+        await expect(page.locator("#closingSummaryText")).toContainText("印象");
         await page.locator("#summaryModalClose").click();
         await expect(page.locator("#closingSummaryModal")).toBeHidden();
+        await expect(page.getByRole("button", { name: "要約を表示する" })).toBeFocused();
         reply = await sendAndReadReply(page, "そう言ってもらえると少し安心しました");
         expect(reply).not.toEqual("");
         await expect(page.locator(".closing-action")).toBeVisible();

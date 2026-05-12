@@ -6,7 +6,7 @@ import {
     showComposer, hideComposer, waitForChoice,
     renderChecklist, renderClosingAction, removeClosingAction,
     setSessionEndedNote, renderUsageStats,
-    showEarlyCloseHint, removeEarlyCloseHint,
+    showEarlyCloseHint, removeEarlyCloseHint, setEarlyCloseHintDisabled,
     showClosingSummaryModal
 } from "./ui.js";
 
@@ -144,6 +144,7 @@ export class InterviewSession {
         this._cancelFollowup();
         this._isBusy = true;
         document.getElementById("sendBtn").disabled = true;
+        setEarlyCloseHintDisabled(true);
         try {
             const prompt = "内部指示: 参加者が話題の切り替えを希望しています。未収集の論点があれば自然に移ってください。なければ別の角度から聞いてみてください。";
             const context = {
@@ -173,6 +174,7 @@ export class InterviewSession {
         } finally {
             this._isBusy = false;
             document.getElementById("sendBtn").disabled = false;
+            if (this._phase === PHASES.CHAT) setEarlyCloseHintDisabled(false);
         }
     }
 
@@ -212,7 +214,7 @@ export class InterviewSession {
                 checkpoints: this.checkpoints,
                 lastUserMessage: this._lastUserMessage,
                 inClosingPhase: true,
-                inClosingSummary: true,
+                inClosingImpressionSummary: true,
             });
             if (this._phase !== PHASES.CLOSING) { removeTyping(); return; }
             showClosingSummaryModal(turn.text);

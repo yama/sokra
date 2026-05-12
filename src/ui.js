@@ -11,6 +11,8 @@ let closingSummaryModalNode = null;
 let closingSummaryTextNode = null;
 let closingSummaryCloseBtn = null;
 let closingSummaryPrimaryCloseBtn = null;
+let closingSummaryReturnFocus = null;
+let earlyCloseHintButtons = [];
 
 export function onUserTypingInput() {
     lastTypingAt = Date.now();
@@ -165,6 +167,7 @@ export function showEarlyCloseHint(onSwitchTopic, onClose) {
             if (hideOnClick) removeEarlyCloseHint();
             Promise.resolve(cb()).catch(() => {});
         });
+        earlyCloseHintButtons.push(btn);
         return btn;
     };
     el.append(
@@ -179,6 +182,13 @@ export function removeEarlyCloseHint() {
     if (!el) return;
     el.style.display = "none";
     el.innerHTML = "";
+    earlyCloseHintButtons = [];
+}
+
+export function setEarlyCloseHintDisabled(isDisabled) {
+    earlyCloseHintButtons.forEach(btn => {
+        btn.disabled = isDisabled;
+    });
 }
 
 export function renderChecklist(checkpoints) {
@@ -218,12 +228,31 @@ function ensureClosingSummaryModal() {
         if (target instanceof HTMLElement && target.dataset.closeSummaryModal === "true") close();
     });
     document.addEventListener("keydown", event => {
-        if (event.key === "Escape" && closingSummaryModalNode && !closingSummaryModalNode.hidden) close();
+        if (!closingSummaryModalNode || closingSummaryModalNode.hidden) return;
+        if (event.key === "Escape") {
+            close();
+            return;
+        }
+        if (event.key !== "Tab") return;
+        const focusables = [...closingSummaryModalNode.querySelectorAll("button")]
+            .filter(el => !el.disabled);
+        if (!focusables.length) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        const active = document.activeElement;
+        if (event.shiftKey && active === first) {
+            last.focus();
+            event.preventDefault();
+        } else if (!event.shiftKey && active === last) {
+            first.focus();
+            event.preventDefault();
+        }
     });
 }
 
 export function showClosingSummaryModal(text) {
     ensureClosingSummaryModal();
+    closingSummaryReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     closingSummaryTextNode.textContent = text;
     closingSummaryModalNode.hidden = false;
     closingSummaryCloseBtn.focus();
@@ -232,6 +261,10 @@ export function showClosingSummaryModal(text) {
 export function closeClosingSummaryModal() {
     if (!closingSummaryModalNode) return;
     closingSummaryModalNode.hidden = true;
+    if (closingSummaryReturnFocus && document.contains(closingSummaryReturnFocus)) {
+        closingSummaryReturnFocus.focus();
+    }
+    closingSummaryReturnFocus = null;
 }
 
 export function renderClosingAction(onFinish, onShowSummary) {
