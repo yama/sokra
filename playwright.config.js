@@ -1,5 +1,6 @@
 const { defineConfig } = require("@playwright/test");
-const TEST_PORT = process.env.SOKRA_TEST_PORT || "3000";
+const _rawPort = parseInt(process.env.SOKRA_TEST_PORT, 10);
+const TEST_PORT = (_rawPort >= 1 && _rawPort <= 65535) ? _rawPort : 3000;
 const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
 
 module.exports = defineConfig({
