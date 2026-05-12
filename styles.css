@@ -29,7 +29,7 @@
 }
 
 body {
-    font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', sans-serif;
+    font-family: sans-serif;
     background: linear-gradient(150deg, #EFF3F8 0%, #F5F7FA 55%, #EEF2F7 100%);
     color: var(--text);
     min-height: 100vh;
