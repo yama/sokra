@@ -57,7 +57,14 @@ function stripEmoji(text) {
 }
 
 function firstEmoji(text) {
-    const m = text.match(/[\p{Extended_Pictographic}]\uFE0F?[\u{1F3FB}-\u{1F3FF}]?/u);
+    if (typeof Intl !== "undefined" && typeof Intl.Segmenter === "function") {
+        const segmenter = new Intl.Segmenter("ja", { granularity: "grapheme" });
+        for (const { segment } of segmenter.segment(String(text || ""))) {
+            if (hasEmoji(segment)) return segment;
+        }
+        return "";
+    }
+    const m = String(text || "").match(/[\p{Extended_Pictographic}]\uFE0F?[\u{1F3FB}-\u{1F3FF}]?/u);
     return m ? m[0] : "";
 }
 
@@ -75,14 +82,13 @@ function wasLastAiReactionOnly() {
     return last.type === "reaction";
 }
 
-function hasRecentShortProbeCadence(userText, minStreak = 2) {
+function hasRecentShortProbeCadence(minStreak = 2) {
     const userTexts = getSessionLog()
         .filter(e => e?.role === "user" && typeof e.text === "string")
         .map(e => e.text.trim());
-    const seq = [...userTexts, String(userText || "").trim()];
     let streak = 0;
-    for (let i = seq.length - 1; i >= 0; i--) {
-        if (!looksLikeShortSingleToken(seq[i])) break;
+    for (let i = userTexts.length - 1; i >= 0; i--) {
+        if (!looksLikeShortSingleToken(userTexts[i])) break;
         streak += 1;
     }
     return streak >= minStreak;
@@ -136,7 +142,7 @@ function normalizeReactionEmojiRhythm(turn, userText = "") {
             has_question: false,
         };
     }
-    if (isShortProbe && hasRecentShortProbeCadence(userText, 2) && turn.reaction && hasEmoji(turn.reaction)) {
+    if (isShortProbe && hasRecentShortProbeCadence(2) && turn.reaction && hasEmoji(turn.reaction)) {
         const one = firstEmoji(turn.reaction);
         return {
             ...turn,
