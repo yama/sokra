@@ -362,7 +362,7 @@ export class InterviewSession {
                     pushSessionEvent({ role: "system", type: "closing_phase_error", message: e.message }).catch(() => {});
                 });
             } else if (this._phase === PHASES.CHAT) {
-                this._scheduleFollowup(turn.has_question, turn.text);
+                if (turn.text) this._scheduleFollowup(turn.has_question, turn.text);
                 if (this._userTurnCount >= EARLY_CLOSE_TURNS) {
                     showEarlyCloseHint(
                         () => this._switchTopic(),

@@ -127,7 +127,7 @@ function parseGeminiResponse(rawText, checkpoints) {
 
 function normalizeReactionEmojiRhythm(turn, userText = "") {
     const isShortProbe = looksLikeShortOutOfContextProbe(userText);
-    if (isShortProbe && wasLastAiReactionOnly()) {
+    if (isShortProbe && wasLastAiReactionOnly() && turn.reaction && hasEmoji(turn.reaction)) {
         const one = firstEmoji(turn.reaction);
         return {
             ...turn,
