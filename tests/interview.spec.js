@@ -322,7 +322,12 @@ test.describe("interview runtime", () => {
         await startInterview(page);
 
         await sendAndReadReply(page, "りんご");
-        await sendAndReadReply(page, "ごりら");
+        const aiBubbles = page.locator(".msg.ai:not([aria-hidden]) .bubble");
+        const beforeSecond = await aiBubbles.count();
+        const secondReply = await sendAndReadReply(page, "ごりら");
+        const afterSecond = await aiBubbles.count();
+        expect(secondReply).toContain("😳");
+        expect(afterSecond).toBe(beforeSecond + 1); // reaction-only なので1バブルだけ増える
         await page.waitForTimeout(600);
 
         const { events } = await currentSession(page);
