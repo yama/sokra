@@ -357,7 +357,7 @@ export class InterviewSession {
                 });
             }
             if (this._phase === PHASES.CLOSING) this._renderClosingAction();
-            if (turn.ready_to_close && this._phase === PHASES.CHAT) {
+            if (turn.text && turn.ready_to_close && this._phase === PHASES.CHAT) {
                 this._beginClosingPhase().catch(e => {
                     pushSessionEvent({ role: "system", type: "closing_phase_error", message: e.message }).catch(() => {});
                 });
