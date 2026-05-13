@@ -65,7 +65,7 @@ function looksLikeShortOutOfContextProbe(userText) {
     const normalized = String(userText || "").trim();
     if (!normalized) return false;
     if (/\s/.test(normalized)) return false;
-    return normalized.length <= 6;
+    return normalized.length <= 4;
 }
 
 function wasLastAiReactionOnly() {
@@ -73,6 +73,19 @@ function wasLastAiReactionOnly() {
     if (aiEvents.length === 0) return false;
     const last = aiEvents[aiEvents.length - 1];
     return last.type === "reaction";
+}
+
+function hasRecentShortProbeCadence(userText, minStreak = 2) {
+    const userTexts = getSessionLog()
+        .filter(e => e?.role === "user" && typeof e.text === "string")
+        .map(e => e.text.trim());
+    const seq = [...userTexts, String(userText || "").trim()];
+    let streak = 0;
+    for (let i = seq.length - 1; i >= 0; i--) {
+        if (!looksLikeShortOutOfContextProbe(seq[i])) break;
+        streak += 1;
+    }
+    return streak >= minStreak;
 }
 
 function simpleHash(text) {
@@ -123,7 +136,7 @@ function normalizeReactionEmojiRhythm(turn, userText = "") {
             has_question: false,
         };
     }
-    if (isShortProbe && turn.reaction && hasEmoji(turn.reaction)) {
+    if (isShortProbe && hasRecentShortProbeCadence(userText, 2) && turn.reaction && hasEmoji(turn.reaction)) {
         const one = firstEmoji(turn.reaction);
         return {
             ...turn,
