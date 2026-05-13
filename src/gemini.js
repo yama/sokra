@@ -57,11 +57,11 @@ function stripEmoji(text) {
 }
 
 function firstEmoji(text) {
-    const m = text.match(/[\p{Extended_Pictographic}]/u);
+    const m = text.match(/[\p{Extended_Pictographic}]\uFE0F?[\u{1F3FB}-\u{1F3FF}]?/u);
     return m ? m[0] : "";
 }
 
-function looksLikeShortOutOfContextProbe(userText) {
+function looksLikeShortSingleToken(userText) {
     const normalized = String(userText || "").trim();
     if (!normalized) return false;
     if (/\s/.test(normalized)) return false;
@@ -82,7 +82,7 @@ function hasRecentShortProbeCadence(userText, minStreak = 2) {
     const seq = [...userTexts, String(userText || "").trim()];
     let streak = 0;
     for (let i = seq.length - 1; i >= 0; i--) {
-        if (!looksLikeShortOutOfContextProbe(seq[i])) break;
+        if (!looksLikeShortSingleToken(seq[i])) break;
         streak += 1;
     }
     return streak >= minStreak;
@@ -126,7 +126,7 @@ function parseGeminiResponse(rawText, checkpoints) {
 }
 
 function normalizeReactionEmojiRhythm(turn, userText = "") {
-    const isShortProbe = looksLikeShortOutOfContextProbe(userText);
+    const isShortProbe = looksLikeShortSingleToken(userText);
     if (isShortProbe && wasLastAiReactionOnly() && turn.reaction && hasEmoji(turn.reaction)) {
         const one = firstEmoji(turn.reaction);
         return {
