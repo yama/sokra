@@ -51,7 +51,7 @@ function hasEmoji(text) {
 
 function stripEmoji(text) {
     return text
-        .replace(/[\p{Extended_Pictographic}\uFE0F]/gu, "")
+        .replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "")
         .replace(/[ \t]{2,}/g, " ")
         .trim();
 }
