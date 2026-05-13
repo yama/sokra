@@ -51,9 +51,47 @@ function hasEmoji(text) {
 
 function stripEmoji(text) {
     return text
-        .replace(/[\p{Extended_Pictographic}\uFE0F]/gu, "")
+        .replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "")
         .replace(/[ \t]{2,}/g, " ")
         .trim();
+}
+
+function firstEmoji(text) {
+    if (typeof Intl !== "undefined" && typeof Intl.Segmenter === "function") {
+        const segmenter = new Intl.Segmenter("ja", { granularity: "grapheme" });
+        for (const { segment } of segmenter.segment(String(text || ""))) {
+            if (hasEmoji(segment)) return segment;
+        }
+        return "";
+    }
+    const m = String(text || "").match(/[\p{Extended_Pictographic}]\uFE0F?[\u{1F3FB}-\u{1F3FF}]?/u);
+    return m ? m[0] : "";
+}
+
+function looksLikeShortSingleToken(userText) {
+    const normalized = String(userText || "").trim();
+    if (!normalized) return false;
+    if (/\s/.test(normalized)) return false;
+    return normalized.length <= 4;
+}
+
+function wasLastAiReactionOnly() {
+    const aiEvents = getSessionLog().filter(e => e?.role === "ai" && typeof e.type === "string");
+    if (aiEvents.length === 0) return false;
+    const last = aiEvents[aiEvents.length - 1];
+    return last.type === "reaction";
+}
+
+function hasRecentShortProbeCadence(minStreak = 2) {
+    const userTexts = getSessionLog()
+        .filter(e => e?.role === "user" && typeof e.text === "string")
+        .map(e => e.text.trim());
+    let streak = 0;
+    for (let i = userTexts.length - 1; i >= 0; i--) {
+        if (!looksLikeShortSingleToken(userTexts[i])) break;
+        streak += 1;
+    }
+    return streak >= minStreak;
 }
 
 function simpleHash(text) {
@@ -94,6 +132,29 @@ function parseGeminiResponse(rawText, checkpoints) {
 }
 
 function normalizeReactionEmojiRhythm(turn, userText = "") {
+    const isShortProbe = looksLikeShortSingleToken(userText);
+    if (isShortProbe && wasLastAiReactionOnly() && turn.reaction && hasEmoji(turn.reaction)) {
+        const one = firstEmoji(turn.reaction);
+        return {
+            ...turn,
+            reaction: one || "😳",
+            text: "",
+            has_question: false,
+            ready_to_close: false,
+            checkpoints_filled: [],
+        };
+    }
+    if (isShortProbe && hasRecentShortProbeCadence(2) && turn.reaction && hasEmoji(turn.reaction)) {
+        const one = firstEmoji(turn.reaction);
+        return {
+            ...turn,
+            reaction: one || "😳",
+            text: "",
+            has_question: false,
+            ready_to_close: false,
+            checkpoints_filled: [],
+        };
+    }
     if (!turn.reaction || !hasEmoji(turn.reaction)) return turn;
     const inCooldown = wasEmojiUsedRecently(2);
     const allowByChance = (simpleHash(`${currentUserTurnIndex()}::${userText}::${turn.reaction}`) % 10) < 6;

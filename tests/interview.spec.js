@@ -309,6 +309,31 @@ test.describe("interview runtime", () => {
         expect(followup).not.toContain("😳😳😳");
     });
 
+    test("reaction-only turn does not schedule automatic followup", async ({ page }) => {
+        await page.addInitScript(() => {
+            window.__SOKRA_FOLLOWUP_MS__ = 200;
+        });
+        await mockGemini(page, () => ({
+            reaction: "😳😳😳",
+            text: "これは本文ですか？",
+            checkpoints_filled: [],
+            ready_to_close: false
+        }));
+        await startInterview(page);
+
+        await sendAndReadReply(page, "りんご");
+        const aiBubbles = page.locator(".msg.ai:not([aria-hidden]) .bubble");
+        const beforeSecond = await aiBubbles.count();
+        const secondReply = await sendAndReadReply(page, "ごりら");
+        const afterSecond = await aiBubbles.count();
+        expect(secondReply).toContain("😳");
+        expect(afterSecond).toBe(beforeSecond + 1); // reaction-only なので1バブルだけ増える
+        await page.waitForTimeout(600);
+
+        const { events } = await currentSession(page);
+        expect(events.some(event => event.type === "followup_question")).toBe(false);
+    });
+
     test("abandon timer ends session after prolonged inactivity", async ({ page }) => {
         await page.addInitScript(() => {
             window.__SOKRA_ABANDON_MS__ = 1000;

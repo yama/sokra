@@ -350,17 +350,19 @@ export class InterviewSession {
             if (turn.reaction) {
                 await this._speakAndLog(turn.reaction, { role: "ai", text: turn.reaction, type: "reaction" });
             }
-            await this._speakAndLog(turn.text, {
-                role: "ai", text: turn.text, type: "generated_turn",
-                answered_checkpoints: turn.checkpoints_filled, ready_to_close: turn.ready_to_close,
-            });
+            if (turn.text) {
+                await this._speakAndLog(turn.text, {
+                    role: "ai", text: turn.text, type: "generated_turn",
+                    answered_checkpoints: turn.checkpoints_filled, ready_to_close: turn.ready_to_close,
+                });
+            }
             if (this._phase === PHASES.CLOSING) this._renderClosingAction();
-            if (turn.ready_to_close && this._phase === PHASES.CHAT) {
+            if (turn.text && turn.ready_to_close && this._phase === PHASES.CHAT) {
                 this._beginClosingPhase().catch(e => {
                     pushSessionEvent({ role: "system", type: "closing_phase_error", message: e.message }).catch(() => {});
                 });
             } else if (this._phase === PHASES.CHAT) {
-                this._scheduleFollowup(turn.has_question, turn.text);
+                if (turn.text) this._scheduleFollowup(turn.has_question, turn.text);
                 if (this._userTurnCount >= EARLY_CLOSE_TURNS) {
                     showEarlyCloseHint(
                         () => this._switchTopic(),
