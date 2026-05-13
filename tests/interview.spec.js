@@ -315,7 +315,7 @@ test.describe("interview runtime", () => {
         });
         await mockGemini(page, () => ({
             reaction: "😳😳😳",
-            text: "これは本文です",
+            text: "これは本文ですか？",
             checkpoints_filled: [],
             ready_to_close: false
         }));

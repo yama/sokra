@@ -140,6 +140,8 @@ function normalizeReactionEmojiRhythm(turn, userText = "") {
             reaction: one || "😳",
             text: "",
             has_question: false,
+            ready_to_close: false,
+            checkpoints_filled: [],
         };
     }
     if (isShortProbe && hasRecentShortProbeCadence(2) && turn.reaction && hasEmoji(turn.reaction)) {
@@ -149,6 +151,8 @@ function normalizeReactionEmojiRhythm(turn, userText = "") {
             reaction: one || "😳",
             text: "",
             has_question: false,
+            ready_to_close: false,
+            checkpoints_filled: [],
         };
     }
     if (!turn.reaction || !hasEmoji(turn.reaction)) return turn;
