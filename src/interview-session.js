@@ -350,10 +350,12 @@ export class InterviewSession {
             if (turn.reaction) {
                 await this._speakAndLog(turn.reaction, { role: "ai", text: turn.reaction, type: "reaction" });
             }
-            await this._speakAndLog(turn.text, {
-                role: "ai", text: turn.text, type: "generated_turn",
-                answered_checkpoints: turn.checkpoints_filled, ready_to_close: turn.ready_to_close,
-            });
+            if (turn.text) {
+                await this._speakAndLog(turn.text, {
+                    role: "ai", text: turn.text, type: "generated_turn",
+                    answered_checkpoints: turn.checkpoints_filled, ready_to_close: turn.ready_to_close,
+                });
+            }
             if (this._phase === PHASES.CLOSING) this._renderClosingAction();
             if (turn.ready_to_close && this._phase === PHASES.CHAT) {
                 this._beginClosingPhase().catch(e => {

@@ -56,6 +56,25 @@ function stripEmoji(text) {
         .trim();
 }
 
+function firstEmoji(text) {
+    const m = text.match(/[\p{Extended_Pictographic}]/u);
+    return m ? m[0] : "";
+}
+
+function looksLikeShortOutOfContextProbe(userText) {
+    const normalized = String(userText || "").trim();
+    if (!normalized) return false;
+    if (/\s/.test(normalized)) return false;
+    return normalized.length <= 6;
+}
+
+function wasLastAiReactionOnly() {
+    const aiEvents = getSessionLog().filter(e => e?.role === "ai" && typeof e.type === "string");
+    if (aiEvents.length === 0) return false;
+    const last = aiEvents[aiEvents.length - 1];
+    return last.type === "reaction";
+}
+
 function simpleHash(text) {
     let hash = 0;
     for (let i = 0; i < text.length; i++) {
@@ -94,6 +113,25 @@ function parseGeminiResponse(rawText, checkpoints) {
 }
 
 function normalizeReactionEmojiRhythm(turn, userText = "") {
+    const isShortProbe = looksLikeShortOutOfContextProbe(userText);
+    if (isShortProbe && wasLastAiReactionOnly()) {
+        const one = firstEmoji(turn.reaction);
+        return {
+            ...turn,
+            reaction: one || "😳",
+            text: "",
+            has_question: false,
+        };
+    }
+    if (isShortProbe && turn.reaction && hasEmoji(turn.reaction)) {
+        const one = firstEmoji(turn.reaction);
+        return {
+            ...turn,
+            reaction: one || "😳",
+            text: "",
+            has_question: false,
+        };
+    }
     if (!turn.reaction || !hasEmoji(turn.reaction)) return turn;
     const inCooldown = wasEmojiUsedRecently(2);
     const allowByChance = (simpleHash(`${currentUserTurnIndex()}::${userText}::${turn.reaction}`) % 10) < 6;
