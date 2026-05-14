@@ -49,23 +49,26 @@ function hasEmoji(text) {
     return /[\p{Extended_Pictographic}\uFE0F]/u.test(text);
 }
 
+function countEmojiClusters(text) {
+    const value = String(text || "");
+    if (!value) return 0;
+    if (typeof Intl !== "undefined" && typeof Intl.Segmenter === "function") {
+        const segmenter = new Intl.Segmenter("ja", { granularity: "grapheme" });
+        let count = 0;
+        for (const { segment } of segmenter.segment(value)) {
+            if (hasEmoji(segment)) count += 1;
+        }
+        return count;
+    }
+    const matches = value.match(/[\p{Extended_Pictographic}]\uFE0F?/gu);
+    return matches ? matches.length : 0;
+}
+
 function stripEmoji(text) {
     return text
         .replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "")
         .replace(/[ \t]{2,}/g, " ")
         .trim();
-}
-
-function firstEmoji(text) {
-    if (typeof Intl !== "undefined" && typeof Intl.Segmenter === "function") {
-        const segmenter = new Intl.Segmenter("ja", { granularity: "grapheme" });
-        for (const { segment } of segmenter.segment(String(text || ""))) {
-            if (hasEmoji(segment)) return segment;
-        }
-        return "";
-    }
-    const m = String(text || "").match(/[\p{Extended_Pictographic}]\uFE0F?[\u{1F3FB}-\u{1F3FF}]?/u);
-    return m ? m[0] : "";
 }
 
 function looksLikeShortSingleToken(userText) {
@@ -75,95 +78,42 @@ function looksLikeShortSingleToken(userText) {
     return normalized.length <= 4;
 }
 
-function wasLastAiReactionOnly() {
-    const aiEvents = getSessionLog().filter(e => e?.role === "ai" && typeof e.type === "string");
-    if (aiEvents.length === 0) return false;
-    const last = aiEvents[aiEvents.length - 1];
-    return last.type === "reaction";
-}
-
-function hasRecentShortProbeCadence(minStreak = 2) {
-    const userTexts = getSessionLog()
-        .filter(e => e?.role === "user" && typeof e.text === "string")
-        .map(e => e.text.trim());
-    let streak = 0;
-    for (let i = userTexts.length - 1; i >= 0; i--) {
-        if (!looksLikeShortSingleToken(userTexts[i])) break;
-        streak += 1;
-    }
-    return streak >= minStreak;
-}
-
-function simpleHash(text) {
-    let hash = 0;
-    for (let i = 0; i < text.length; i++) {
-        hash = ((hash << 5) - hash) + text.charCodeAt(i);
-        hash |= 0;
-    }
-    return Math.abs(hash);
-}
-
-function wasEmojiUsedRecently(cooldownTurns = 2) {
-    const reactions = getSessionLog()
-        .filter(e => e?.role === "ai" && e?.type === "reaction" && typeof e.text === "string")
-        .map(e => e.text);
-    return reactions.slice(-cooldownTurns).some(hasEmoji);
-}
-
-function currentUserTurnIndex() {
-    return getSessionLog().filter(e => e?.role === "user" && typeof e.text === "string").length;
-}
-
 function parseGeminiResponse(rawText, checkpoints) {
     const parsed = JSON.parse(String(rawText || "").trim());
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
         throw new Error("response is not a JSON object");
     }
     const text = typeof parsed.text === "string" ? parsed.text.trim() : "";
-    if (!text) throw new Error("response.text is required");
     const reaction = typeof parsed.reaction === "string" ? parsed.reaction.trim() : "";
+    const readyToClose = parsed.ready_to_close === true;
+    if (!text && !reaction) {
+        throw new Error("response.text or response.reaction is required");
+    }
+    if (readyToClose && !text) {
+        throw new Error("response.text is required when ready_to_close is true");
+    }
     return {
         reaction,
         text,
         checkpoints_filled: validateCheckpointsFilled(parsed.checkpoints_filled, checkpoints),
-        ready_to_close: parsed.ready_to_close === true,
-        has_question: typeof parsed.has_question === "boolean" ? parsed.has_question : true,
+        ready_to_close: readyToClose,
+        has_question: text
+            ? (typeof parsed.has_question === "boolean" ? parsed.has_question : true)
+            : false,
     };
 }
 
 function normalizeReactionEmojiRhythm(turn, userText = "") {
-    const isShortProbe = looksLikeShortSingleToken(userText);
-    if (isShortProbe && wasLastAiReactionOnly() && turn.reaction && hasEmoji(turn.reaction)) {
-        const one = firstEmoji(turn.reaction);
-        return {
-            ...turn,
-            reaction: one || "😳",
-            text: "",
-            has_question: false,
-            ready_to_close: false,
-            checkpoints_filled: [],
-        };
-    }
-    if (isShortProbe && hasRecentShortProbeCadence(2) && turn.reaction && hasEmoji(turn.reaction)) {
-        const one = firstEmoji(turn.reaction);
-        return {
-            ...turn,
-            reaction: one || "😳",
-            text: "",
-            has_question: false,
-            ready_to_close: false,
-            checkpoints_filled: [],
-        };
-    }
     if (!turn.reaction || !hasEmoji(turn.reaction)) return turn;
-    const inCooldown = wasEmojiUsedRecently(2);
-    const allowByChance = (simpleHash(`${currentUserTurnIndex()}::${userText}::${turn.reaction}`) % 10) < 6;
-    const keepEmoji = !inCooldown && allowByChance;
     return {
         ...turn,
-        reaction: keepEmoji ? turn.reaction : stripEmoji(turn.reaction),
         text: stripEmoji(turn.text) || turn.text,
     };
+}
+
+export function shouldWaitOnReactionOnly(turn) {
+    if (!turn?.reaction || turn?.text) return false;
+    return countEmojiClusters(turn.reaction) === 1;
 }
 
 function recordUsage(usage) {
@@ -203,7 +153,8 @@ async function requestGeminiTurn(userText, context, retryReason = "") {
                 systemPrompt: buildSystemPrompt(sessionContext, checkpoints, retryReason, {
                     inClosingPhase,
                     inClosingSummary,
-                    inClosingImpressionSummary
+                    inClosingImpressionSummary,
+                    inPlayfulShortProbeMode: looksLikeShortSingleToken(userText)
                 }),
                 conversationHistory: buildConversationHistory(lastUserMessage),
                 userText,

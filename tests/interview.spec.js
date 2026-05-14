@@ -31,6 +31,32 @@ async function sendAndReadReply(page, text) {
     return await readLastAiText(page);
 }
 
+async function sendAndWaitForAiBubble(page, text) {
+    const aiBubbles = page.locator(".msg.ai:not([aria-hidden]) .bubble");
+    const beforeCount = await aiBubbles.count();
+    await sendMessage(page, text);
+    await expect
+        .poll(async () => await aiBubbles.count(), {
+            message: "AI bubble count should increase",
+            timeout: 15000
+        })
+        .toBeGreaterThan(beforeCount);
+    return await aiBubbles.last().innerText();
+}
+
+async function sendAndWaitForAiBubbles(page, text, expectedIncrease) {
+    const aiBubbles = page.locator(".msg.ai:not([aria-hidden]) .bubble");
+    const beforeCount = await aiBubbles.count();
+    await sendMessage(page, text);
+    await expect
+        .poll(async () => await aiBubbles.count(), {
+            message: "AI bubble count should increase by the expected amount",
+            timeout: 15000
+        })
+        .toBe(beforeCount + expectedIncrease);
+    return aiBubbles;
+}
+
 async function finishInterview(page) {
     const eventPersisted = page.waitForResponse(response =>
         response.request().method() === "POST"
@@ -297,9 +323,7 @@ test.describe("interview runtime", () => {
         }));
         await startInterview(page);
 
-        await sendAndReadReply(page, "豚カツ");
-
-        const aiBubbles = page.locator(".msg.ai:not([aria-hidden]) .bubble");
+        const aiBubbles = await sendAndWaitForAiBubbles(page, "豚カツ", 2);
         const bubbleCount = await aiBubbles.count();
         const reaction = await aiBubbles.nth(bubbleCount - 2).innerText();
         const followup = await aiBubbles.nth(bubbleCount - 1).innerText();
@@ -309,29 +333,74 @@ test.describe("interview runtime", () => {
         expect(followup).not.toContain("😳😳😳");
     });
 
-    test("reaction-only turn does not schedule automatic followup", async ({ page }) => {
+    test("short probes allow reaction-only turns and enable playful prompt mode", async ({ page }) => {
         await page.addInitScript(() => {
             window.__SOKRA_FOLLOWUP_MS__ = 200;
         });
-        await mockGemini(page, () => ({
-            reaction: "😳😳😳",
-            text: "これは本文ですか？",
+        const geminiCalls = await mockGemini(page, (_body, callCount) => ({
+            reaction: callCount === 1 ? "りんご！" : "あはは！",
+            text: "",
             checkpoints_filled: [],
             ready_to_close: false
         }));
         await startInterview(page);
 
-        await sendAndReadReply(page, "りんご");
+        const firstReply = await sendAndWaitForAiBubble(page, "りんご");
+        expect(firstReply).toBe("りんご！");
         const aiBubbles = page.locator(".msg.ai:not([aria-hidden]) .bubble");
         const beforeSecond = await aiBubbles.count();
-        const secondReply = await sendAndReadReply(page, "ごりら");
+        const secondReply = await sendAndWaitForAiBubble(page, "ごりら");
         const afterSecond = await aiBubbles.count();
-        expect(secondReply).toContain("😳");
-        expect(afterSecond).toBe(beforeSecond + 1); // reaction-only なので1バブルだけ増える
+        expect(secondReply).toBe("あはは！");
+        expect(afterSecond).toBe(beforeSecond + 1); // reaction-only
         await page.waitForTimeout(600);
 
         const { events } = await currentSession(page);
+        expect(events.filter(event => event.type === "generated_turn")).toHaveLength(0);
+        expect(events.filter(event => event.type === "reaction")).toHaveLength(2);
+        expect(geminiCalls[1].systemPrompt).toContain("遊び入力の連続");
+        expect(geminiCalls[1].systemPrompt).toContain("堅い受け方にしない");
         expect(events.some(event => event.type === "followup_question")).toBe(false);
+    });
+
+    test("emoji burst reaction-only schedules a followup, but single emoji waits", async ({ page }) => {
+        await page.addInitScript(() => {
+            window.__SOKRA_FOLLOWUP_MS__ = 200;
+        });
+        const geminiCalls = await mockGemini(page, (_body, callCount) => {
+            if (callCount === 1) {
+                return {
+                    reaction: "😳😳😳",
+                    text: "",
+                    checkpoints_filled: [],
+                    ready_to_close: false
+                };
+            }
+            return {
+                text: "前の言葉をそのまま広げなくて大丈夫です。印象に残ったことがあれば、そこから聞かせてください。",
+                checkpoints_filled: [],
+                ready_to_close: false
+            };
+        });
+        await startInterview(page);
+
+        const reactionOnly = await sendAndWaitForAiBubble(page, "アキワイワイ。ワキアイアイ？");
+        expect(reactionOnly).toContain("😳😳😳");
+        const aiBubbles = page.locator(".msg.ai:not([aria-hidden]) .bubble");
+        const beforeFollowupCount = await aiBubbles.count();
+        await expect
+            .poll(async () => await aiBubbles.count(), {
+                message: "followup bubble should appear after emoji burst reaction-only",
+                timeout: 15000
+            })
+            .toBe(beforeFollowupCount + 1);
+        const bubbleCount = await aiBubbles.count();
+        const followup = await aiBubbles.nth(bubbleCount - 1).innerText();
+        expect(followup).toContain("印象に残ったこと");
+
+        const { events } = await currentSession(page);
+        expect(events.some(event => event.type === "followup_question")).toBe(true);
+        expect(geminiCalls).toHaveLength(2);
     });
 
     test("abandon timer ends session after prolonged inactivity", async ({ page }) => {
