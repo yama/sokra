@@ -1,6 +1,11 @@
 import { CONTEXT_QUESTIONS, createCheckpoints } from "../interview-flow.js";
 import { startServerSession, pushSessionEvent, getSessionId, getSessionLog, getPersistenceError } from "./session.js";
-import { generateInterviewTurn, getUsageSummary } from "./gemini.js";
+import {
+    generateInterviewTurn,
+    getUsageSummary,
+    shouldScheduleFollowupOnReactionOnly,
+    shouldWaitOnReactionOnly
+} from "./gemini.js";
 import {
     addMessage, speak, withTypingUntilMessage, removeTyping,
     showComposer, hideComposer, waitForChoice,
@@ -103,13 +108,14 @@ export class InterviewSession {
         this._isBusy = true;
         document.getElementById("sendBtn").disabled = true;
         try {
-            const prompt = "内部指示: 直前の応答が相づちのみになってしまいました。前のメッセージを繰り返さず、参加者に続きを促す短い問いかけを1文だけ送ってください。";
+            const prompt = "内部指示: 直前の応答が相づちのみになってしまいました。直前のAIのreactionやtextと同じ評価語・感嘆・言い回しを繰り返さず、参加者に続きを促す短い問いかけを1文だけ送ってください。reactionは付けず、textだけを返してください。";
             const context = {
                 model: this.model,
                 sessionContext: this.sessionContext,
                 checkpoints: this.checkpoints,
                 lastUserMessage: this._lastUserMessage,
                 inClosingPhase: false,
+                allowReactionOnly: false,
             };
             const turn = await withTypingUntilMessage(() => generateInterviewTurn(prompt, context));
             if (!this.isActive() || token !== this._followupToken) { removeTyping(); return; }
@@ -164,6 +170,7 @@ export class InterviewSession {
                 checkpoints: this.checkpoints,
                 lastUserMessage: this._lastUserMessage,
                 inClosingPhase: false,
+                allowReactionOnly: false,
             };
             const turn = await withTypingUntilMessage(() => generateInterviewTurn(prompt, context));
             if (!this.isActive()) { removeTyping(); return; }
@@ -362,7 +369,11 @@ export class InterviewSession {
                     pushSessionEvent({ role: "system", type: "closing_phase_error", message: e.message }).catch(() => {});
                 });
             } else if (this._phase === PHASES.CHAT) {
-                if (turn.text) this._scheduleFollowup(turn.has_question, turn.text);
+                if (turn.text) {
+                    this._scheduleFollowup(turn.has_question, turn.text);
+                } else if (shouldScheduleFollowupOnReactionOnly(turn) && !shouldWaitOnReactionOnly(turn)) {
+                    this._scheduleFollowup(false, "");
+                }
                 if (this._userTurnCount >= EARLY_CLOSE_TURNS) {
                     showEarlyCloseHint(
                         () => this._switchTopic(),
