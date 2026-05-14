@@ -15,6 +15,20 @@ let usageSummary = {
 
 export const getUsageSummary = () => ({ ...usageSummary });
 
+const PLAYFUL_SHORT_PROBE_MODES = {
+    OFF: "off",
+    SINGLE: "single",
+    SHORT_PROBE_STREAK: "short_probe_streak",
+    SHIRITORI_STREAK: "shiritori_streak",
+};
+
+const TURN_POLICY = {
+    NORMAL: "normal",
+    PLAYFUL_SINGLE: "playful_single",
+    PLAYFUL_SHORT_STREAK: "playful_short_streak",
+    PLAYFUL_SHIRITORI_STREAK: "playful_shiritori_streak",
+};
+
 function buildConversationHistory(lastUserMessage) {
     const log = getSessionLog().slice();
     const last = log[log.length - 1];
@@ -71,18 +85,35 @@ function stripEmoji(text) {
         .trim();
 }
 
+function normalizeUserText(text) {
+    return String(text || "").trim();
+}
+
 function looksLikeShortSingleToken(userText) {
-    const normalized = String(userText || "").trim();
+    const normalized = normalizeUserText(userText);
     if (!normalized) return false;
     if (/\s/.test(normalized)) return false;
     return normalized.length <= 4;
 }
 
-function countTrailingShortSingleTokenUserTurns(userText) {
+function recentUserTextsWithCurrent(userText) {
     const userTexts = getSessionLog()
-        .filter(e => e?.role === "user" && typeof e.text === "string")
+        .filter(e =>
+            e?.role === "user"
+            && typeof e.text === "string"
+            && e?.type !== "button"
+        )
         .map(e => e.text.trim());
-    userTexts.push(String(userText || "").trim());
+    const currentText = normalizeUserText(userText);
+    if (userTexts[userTexts.length - 1] === currentText) {
+        return userTexts;
+    }
+    userTexts.push(currentText);
+    return userTexts;
+}
+
+function countTrailingShortSingleTokenUserTurns(userText) {
+    const userTexts = recentUserTextsWithCurrent(userText);
     let streak = 0;
     for (let i = userTexts.length - 1; i >= 0; i--) {
         if (!looksLikeShortSingleToken(userTexts[i])) break;
@@ -91,12 +122,110 @@ function countTrailingShortSingleTokenUserTurns(userText) {
     return streak;
 }
 
-function getPlayfulShortProbeMode(userText) {
-    if (!looksLikeShortSingleToken(userText)) return "off";
-    return countTrailingShortSingleTokenUserTurns(userText) >= 2 ? "streak" : "single";
+function normalizeKanaForComparison(text) {
+    return normalizeUserText(text)
+        .replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
+        .replace(/[ー〜～・!?！？。、,\.\s]/g, "")
+        .replace(/[ぁぃぅぇぉゃゅょっゎ]/g, ch => ({
+            "ぁ": "あ", "ぃ": "い", "ぅ": "う", "ぇ": "え", "ぉ": "お",
+            "ゃ": "や", "ゅ": "ゆ", "ょ": "よ", "っ": "つ", "ゎ": "わ"
+        }[ch] || ch));
 }
 
-function parseGeminiResponse(rawText, checkpoints, { allowReactionOnly = true } = {}) {
+function firstComparableChar(text) {
+    const normalized = normalizeKanaForComparison(text);
+    return normalized ? normalized[0] : "";
+}
+
+function lastComparableChar(text) {
+    const normalized = normalizeKanaForComparison(text);
+    return normalized ? normalized[normalized.length - 1] : "";
+}
+
+function looksLikeShiritoriPair(previousText, currentText) {
+    const prevLast = lastComparableChar(previousText);
+    const currentFirst = firstComparableChar(currentText);
+    if (!prevLast || !currentFirst) return false;
+    if (prevLast === "ん") return false;
+    return prevLast === currentFirst;
+}
+
+function countTrailingShiritoriTurns(userText) {
+    const userTexts = recentUserTextsWithCurrent(userText);
+    if (userTexts.length < 2) return 0;
+    let streak = 1;
+    for (let i = userTexts.length - 1; i > 0; i--) {
+        if (!looksLikeShortSingleToken(userTexts[i]) || !looksLikeShortSingleToken(userTexts[i - 1])) break;
+        if (!looksLikeShiritoriPair(userTexts[i - 1], userTexts[i])) break;
+        streak += 1;
+    }
+    return streak;
+}
+
+function getPlayfulShortProbeMode(userText) {
+    if (!looksLikeShortSingleToken(userText)) return PLAYFUL_SHORT_PROBE_MODES.OFF;
+    if (countTrailingShiritoriTurns(userText) >= 2) return PLAYFUL_SHORT_PROBE_MODES.SHIRITORI_STREAK;
+    if (countTrailingShortSingleTokenUserTurns(userText) >= 2) return PLAYFUL_SHORT_PROBE_MODES.SHORT_PROBE_STREAK;
+    return PLAYFUL_SHORT_PROBE_MODES.SINGLE;
+}
+
+function buildTurnPolicy(userText, context) {
+    if (context.allowReactionOnly === false) {
+        return {
+            name: TURN_POLICY.NORMAL,
+            promptMode: PLAYFUL_SHORT_PROBE_MODES.OFF,
+            allowReactionOnly: false,
+            waitOnReactionOnly: false,
+            scheduleFollowupOnReactionOnly: false,
+        };
+    }
+
+    const promptMode = getPlayfulShortProbeMode(userText);
+    if (promptMode === PLAYFUL_SHORT_PROBE_MODES.SINGLE) {
+        return {
+            name: TURN_POLICY.PLAYFUL_SINGLE,
+            promptMode,
+            allowReactionOnly: true,
+            waitOnReactionOnly: true,
+            scheduleFollowupOnReactionOnly: true,
+        };
+    }
+    if (promptMode === PLAYFUL_SHORT_PROBE_MODES.SHORT_PROBE_STREAK) {
+        return {
+            name: TURN_POLICY.PLAYFUL_SHORT_STREAK,
+            promptMode,
+            allowReactionOnly: false,
+            waitOnReactionOnly: false,
+            scheduleFollowupOnReactionOnly: false,
+        };
+    }
+    if (promptMode === PLAYFUL_SHORT_PROBE_MODES.SHIRITORI_STREAK) {
+        return {
+            name: TURN_POLICY.PLAYFUL_SHIRITORI_STREAK,
+            promptMode,
+            allowReactionOnly: false,
+            waitOnReactionOnly: false,
+            scheduleFollowupOnReactionOnly: false,
+        };
+    }
+
+    return {
+        name: TURN_POLICY.NORMAL,
+        promptMode,
+        allowReactionOnly: false,
+        waitOnReactionOnly: false,
+        scheduleFollowupOnReactionOnly: false,
+    };
+}
+
+function attachTurnPolicy(turn, policy) {
+    return {
+        ...turn,
+        turn_policy: policy,
+    };
+}
+
+function parseGeminiResponse(rawText, checkpoints, policy) {
     const parsed = JSON.parse(String(rawText || "").trim());
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
         throw new Error("response is not a JSON object");
@@ -107,7 +236,7 @@ function parseGeminiResponse(rawText, checkpoints, { allowReactionOnly = true } 
     if (!text && !reaction) {
         throw new Error("response.text or response.reaction is required");
     }
-    if (!allowReactionOnly && !text) {
+    if (!policy.allowReactionOnly && !text) {
         throw new Error("response.text is required for this turn");
     }
     if (readyToClose && !text) {
@@ -124,7 +253,7 @@ function parseGeminiResponse(rawText, checkpoints, { allowReactionOnly = true } 
     };
 }
 
-function normalizeReactionEmojiRhythm(turn, userText = "") {
+function normalizeReactionEmojiRhythm(turn) {
     if (!turn.reaction || !hasEmoji(turn.reaction)) return turn;
     return {
         ...turn,
@@ -134,7 +263,12 @@ function normalizeReactionEmojiRhythm(turn, userText = "") {
 
 export function shouldWaitOnReactionOnly(turn) {
     if (!turn?.reaction || turn?.text) return false;
-    return countEmojiClusters(turn.reaction) === 1;
+    return turn?.turn_policy?.waitOnReactionOnly === true && countEmojiClusters(turn.reaction) === 1;
+}
+
+export function shouldScheduleFollowupOnReactionOnly(turn) {
+    if (!turn?.reaction || turn?.text) return false;
+    return turn?.turn_policy?.scheduleFollowupOnReactionOnly === true;
 }
 
 function recordUsage(usage) {
@@ -154,9 +288,8 @@ async function requestGeminiTurn(userText, context, retryReason = "") {
         inClosingPhase = false,
         inClosingSummary = false,
         inClosingImpressionSummary = false,
-        allowReactionOnly = true
     } = context;
-    const playfulShortProbeMode = getPlayfulShortProbeMode(userText);
+    const policy = buildTurnPolicy(userText, context);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), GEMINI_REQUEST_TIMEOUT_MS);
@@ -177,7 +310,7 @@ async function requestGeminiTurn(userText, context, retryReason = "") {
                     inClosingPhase,
                     inClosingSummary,
                     inClosingImpressionSummary,
-                    playfulShortProbeMode
+                    playfulShortProbeMode: policy.promptMode
                 }),
                 conversationHistory: buildConversationHistory(lastUserMessage),
                 userText,
@@ -199,30 +332,28 @@ async function requestGeminiTurn(userText, context, retryReason = "") {
     if (!res.ok) throw new Error(data.error || `Gemini API request failed: ${res.status}`);
 
     recordUsage(data.usage);
-    return String(data.text || "");
+    return { rawText: String(data.text || ""), policy };
 }
 
 export async function generateInterviewTurn(userText, context) {
     try {
-        return normalizeReactionEmojiRhythm(
-            parseGeminiResponse(
-                await requestGeminiTurn(userText, context),
-                context.checkpoints,
-                { allowReactionOnly: context.allowReactionOnly !== false }
+        const { rawText, policy } = await requestGeminiTurn(userText, context);
+        return attachTurnPolicy(
+            normalizeReactionEmojiRhythm(
+                parseGeminiResponse(rawText, context.checkpoints, policy)
             ),
-            userText
+            policy
         );
     } catch (firstError) {
         usageSummary.retries += 1;
         pushSessionEvent({ role: "system", type: "ai_turn_retry", reason: firstError.message }).catch(() => {});
         try {
-            return normalizeReactionEmojiRhythm(
-                parseGeminiResponse(
-                    await requestGeminiTurn(userText, context, firstError.message),
-                    context.checkpoints,
-                    { allowReactionOnly: context.allowReactionOnly !== false }
+            const { rawText, policy } = await requestGeminiTurn(userText, context, firstError.message);
+            return attachTurnPolicy(
+                normalizeReactionEmojiRhythm(
+                    parseGeminiResponse(rawText, context.checkpoints, policy)
                 ),
-                userText
+                policy
             );
         } catch (secondError) {
             throw new Error(`Gemini interview turn failed after retry: ${secondError.message}`);

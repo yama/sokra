@@ -1,6 +1,11 @@
 import { CONTEXT_QUESTIONS, createCheckpoints } from "../interview-flow.js";
 import { startServerSession, pushSessionEvent, getSessionId, getSessionLog, getPersistenceError } from "./session.js";
-import { generateInterviewTurn, getUsageSummary, shouldWaitOnReactionOnly } from "./gemini.js";
+import {
+    generateInterviewTurn,
+    getUsageSummary,
+    shouldScheduleFollowupOnReactionOnly,
+    shouldWaitOnReactionOnly
+} from "./gemini.js";
 import {
     addMessage, speak, withTypingUntilMessage, removeTyping,
     showComposer, hideComposer, waitForChoice,
@@ -366,7 +371,7 @@ export class InterviewSession {
             } else if (this._phase === PHASES.CHAT) {
                 if (turn.text) {
                     this._scheduleFollowup(turn.has_question, turn.text);
-                } else if (turn.reaction && !shouldWaitOnReactionOnly(turn)) {
+                } else if (shouldScheduleFollowupOnReactionOnly(turn) && !shouldWaitOnReactionOnly(turn)) {
                     this._scheduleFollowup(false, "");
                 }
                 if (this._userTurnCount >= EARLY_CLOSE_TURNS) {
