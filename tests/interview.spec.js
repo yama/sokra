@@ -351,11 +351,18 @@ test.describe("interview runtime", () => {
 
         const firstReply = await sendAndWaitForAiBubble(page, "りんご");
         expect(firstReply).toBe("😳");
+        const aiBubbles = page.locator(".msg.ai:not([aria-hidden]) .bubble");
+        const beforeWait = await aiBubbles.count();
         await page.waitForTimeout(1200);
+        await expect
+            .poll(async () => await aiBubbles.count(), {
+                message: "single emoji reaction-only should not add a followup bubble",
+                timeout: 1500
+            })
+            .toBe(beforeWait);
         let session = await currentSession(page);
         expect(session.events.some(event => event.type === "followup_question")).toBe(false);
 
-        const aiBubbles = page.locator(".msg.ai:not([aria-hidden]) .bubble");
         const beforeSecond = await aiBubbles.count();
         await sendAndWaitForAiBubbles(page, "ぱんだ", 2);
         const afterSecond = await aiBubbles.count();
@@ -386,7 +393,15 @@ test.describe("interview runtime", () => {
 
         const firstReply = await sendAndWaitForAiBubble(page, "あいうえお");
         expect(firstReply).toBe("😳");
+        const aiBubbles = page.locator(".msg.ai:not([aria-hidden]) .bubble");
+        const beforeWait = await aiBubbles.count();
         await page.waitForTimeout(1200);
+        await expect
+            .poll(async () => await aiBubbles.count(), {
+                message: "simple kana probe should stay reaction-only without followup",
+                timeout: 1500
+            })
+            .toBe(beforeWait);
         const session = await currentSession(page);
         expect(session.events.some(event => event.type === "followup_question")).toBe(false);
         expect(geminiCalls[0].systemPrompt).toContain("単発の遊び入力");
@@ -423,7 +438,7 @@ test.describe("interview runtime", () => {
             })
             .toBeGreaterThan(beforeFollowupCount);
 
-        const { events } = await currentSession(page);
+        const { events } = await currentSession(page, "followup_question");
         expect(events.some(event => event.type === "followup_question")).toBe(true);
         expect(geminiCalls).toHaveLength(2);
     });
@@ -468,7 +483,7 @@ test.describe("interview runtime", () => {
         expect(await aiBubbles.nth(afterSecond - 2).innerText()).toBe("あはは！");
         expect(await aiBubbles.nth(afterSecond - 1).innerText()).toContain("なんだか面白くなってきましたね");
 
-        const { usageText, events } = await currentSession(page);
+        const { usageText, events } = await currentSession(page, "followup_question");
         expect(usageText).toContain("再試行: 1回");
         expect(events.some(event => event.type === "ai_turn_retry")).toBe(true);
         expect(geminiCalls).toHaveLength(4);
@@ -513,7 +528,7 @@ test.describe("interview runtime", () => {
             })
             .toBeGreaterThan(beforeFollowupCount);
 
-        const { usageText, events } = await currentSession(page);
+        const { usageText, events } = await currentSession(page, "followup_question");
         expect(usageText).toContain("再試行: 1回");
         expect(events.some(event => event.type === "ai_turn_retry")).toBe(true);
         expect(events.some(event => event.type === "followup_question")).toBe(true);

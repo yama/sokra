@@ -235,24 +235,26 @@ function parseGeminiResponse(rawText, checkpoints, policy) {
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
         throw new Error("response is not a JSON object");
     }
-    const text = typeof parsed.text === "string" ? parsed.text.trim() : "";
-    const reaction = typeof parsed.reaction === "string" ? parsed.reaction.trim() : "";
-    const readyToClose = parsed.ready_to_close === true;
-    if (!text && !reaction) {
+    const turn = normalizeReactionEmojiRhythm({
+        reaction: typeof parsed.reaction === "string" ? parsed.reaction.trim() : "",
+        text: typeof parsed.text === "string" ? parsed.text.trim() : "",
+        ready_to_close: parsed.ready_to_close === true,
+    });
+    if (!turn.text && !turn.reaction) {
         throw new Error("response.text or response.reaction is required");
     }
-    if (!policy.allowReactionOnly && !text) {
+    if (!policy.allowReactionOnly && !turn.text) {
         throw new Error("response.text is required for this turn");
     }
-    if (readyToClose && !text) {
+    if (turn.ready_to_close && !turn.text) {
         throw new Error("response.text is required when ready_to_close is true");
     }
     return {
-        reaction,
-        text,
+        reaction: turn.reaction,
+        text: turn.text,
         checkpoints_filled: validateCheckpointsFilled(parsed.checkpoints_filled, checkpoints),
-        ready_to_close: readyToClose,
-        has_question: text
+        ready_to_close: turn.ready_to_close,
+        has_question: turn.text
             ? (typeof parsed.has_question === "boolean" ? parsed.has_question : true)
             : false,
     };
@@ -273,7 +275,8 @@ export function shouldWaitOnReactionOnly(turn) {
 
 export function shouldScheduleFollowupOnReactionOnly(turn) {
     if (!turn?.reaction || turn?.text) return false;
-    return turn?.turn_policy?.scheduleFollowupOnReactionOnly === true;
+    return turn?.turn_policy?.scheduleFollowupOnReactionOnly === true
+        && !shouldWaitOnReactionOnly(turn);
 }
 
 function recordUsage(usage) {
