@@ -89,11 +89,16 @@ function normalizeUserText(text) {
     return String(text || "").trim();
 }
 
-function looksLikeShortSingleToken(userText) {
+function isSimpleKanaToken(text) {
+    return /^[ぁ-ゖァ-ヶー]+$/u.test(text);
+}
+
+function looksLikePlayfulSingleProbe(userText) {
     const normalized = normalizeUserText(userText);
     if (!normalized) return false;
     if (/\s/.test(normalized)) return false;
-    return normalized.length <= 4;
+    if (normalized.length <= 4) return true;
+    return isSimpleKanaToken(normalized) && normalized.length <= 6;
 }
 
 function recentUserTextsWithCurrent(userText) {
@@ -116,7 +121,7 @@ function countTrailingShortSingleTokenUserTurns(userText) {
     const userTexts = recentUserTextsWithCurrent(userText);
     let streak = 0;
     for (let i = userTexts.length - 1; i >= 0; i--) {
-        if (!looksLikeShortSingleToken(userTexts[i])) break;
+        if (!looksLikePlayfulSingleProbe(userTexts[i])) break;
         streak += 1;
     }
     return streak;
@@ -155,7 +160,7 @@ function countTrailingShiritoriTurns(userText) {
     if (userTexts.length < 2) return 0;
     let streak = 1;
     for (let i = userTexts.length - 1; i > 0; i--) {
-        if (!looksLikeShortSingleToken(userTexts[i]) || !looksLikeShortSingleToken(userTexts[i - 1])) break;
+        if (!looksLikePlayfulSingleProbe(userTexts[i]) || !looksLikePlayfulSingleProbe(userTexts[i - 1])) break;
         if (!looksLikeShiritoriPair(userTexts[i - 1], userTexts[i])) break;
         streak += 1;
     }
@@ -163,7 +168,7 @@ function countTrailingShiritoriTurns(userText) {
 }
 
 function getPlayfulShortProbeMode(userText) {
-    if (!looksLikeShortSingleToken(userText)) return PLAYFUL_SHORT_PROBE_MODES.OFF;
+    if (!looksLikePlayfulSingleProbe(userText)) return PLAYFUL_SHORT_PROBE_MODES.OFF;
     if (countTrailingShiritoriTurns(userText) >= 2) return PLAYFUL_SHORT_PROBE_MODES.SHIRITORI_STREAK;
     if (countTrailingShortSingleTokenUserTurns(userText) >= 2) return PLAYFUL_SHORT_PROBE_MODES.SHORT_PROBE_STREAK;
     return PLAYFUL_SHORT_PROBE_MODES.SINGLE;

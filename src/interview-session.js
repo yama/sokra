@@ -108,7 +108,7 @@ export class InterviewSession {
         this._isBusy = true;
         document.getElementById("sendBtn").disabled = true;
         try {
-            const prompt = "内部指示: 直前の応答が相づちのみになってしまいました。前のメッセージを繰り返さず、参加者に続きを促す短い問いかけを1文だけ送ってください。";
+            const prompt = "内部指示: 直前の応答が相づちのみになってしまいました。直前のAIのreactionやtextと同じ評価語・感嘆・言い回しを繰り返さず、参加者に続きを促す短い問いかけを1文だけ送ってください。reactionは付けず、textだけを返してください。";
             const context = {
                 model: this.model,
                 sessionContext: this.sessionContext,

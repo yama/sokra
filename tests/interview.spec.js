@@ -372,6 +372,26 @@ test.describe("interview runtime", () => {
         expect(geminiCalls[1].systemPrompt).toContain("堅い受け方にしない");
     });
 
+    test("simple kana run can start with a single reaction-only probe", async ({ page }) => {
+        await page.addInitScript(() => {
+            window.__SOKRA_FOLLOWUP_MS__ = 200;
+        });
+        const geminiCalls = await mockGemini(page, () => ({
+            reaction: "😳",
+            text: "",
+            checkpoints_filled: [],
+            ready_to_close: false
+        }));
+        await startInterview(page);
+
+        const firstReply = await sendAndWaitForAiBubble(page, "あいうえお");
+        expect(firstReply).toBe("😳");
+        await page.waitForTimeout(1200);
+        const session = await currentSession(page);
+        expect(session.events.some(event => event.type === "followup_question")).toBe(false);
+        expect(geminiCalls[0].systemPrompt).toContain("単発の遊び入力");
+    });
+
     test("single short probe with emoji burst reaction-only schedules a followup", async ({ page }) => {
         await page.addInitScript(() => {
             window.__SOKRA_FOLLOWUP_MS__ = 200;
