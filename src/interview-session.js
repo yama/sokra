@@ -110,6 +110,7 @@ export class InterviewSession {
                 checkpoints: this.checkpoints,
                 lastUserMessage: this._lastUserMessage,
                 inClosingPhase: false,
+                allowReactionOnly: false,
             };
             const turn = await withTypingUntilMessage(() => generateInterviewTurn(prompt, context));
             if (!this.isActive() || token !== this._followupToken) { removeTyping(); return; }
@@ -164,6 +165,7 @@ export class InterviewSession {
                 checkpoints: this.checkpoints,
                 lastUserMessage: this._lastUserMessage,
                 inClosingPhase: false,
+                allowReactionOnly: false,
             };
             const turn = await withTypingUntilMessage(() => generateInterviewTurn(prompt, context));
             if (!this.isActive()) { removeTyping(); return; }

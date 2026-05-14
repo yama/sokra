@@ -40,24 +40,27 @@ export function buildSystemPrompt(sessionContext, checkpoints, retryReason = "",
     const closingInstruction = options.inClosingPhase
         ? `\n## 終了フェーズ\n参加者には終了ボタンが見えています。追加の発言があれば軽く受け止めてください。新しい話題は始めず、ready_to_close は false にしてください。\n`
         : "";
-    const playfulShortProbeInstruction = options.inPlayfulShortProbeMode
-        ? `\n## 遊び入力の連続\n直近は一語ずつのボケやしりとり風の流れが続いています。このターンは、まずその遊びに短く乗ってください。
+    const playfulShortProbeInstruction = options.playfulShortProbeMode === "single"
+        ? `\n## 単発の遊び入力
+このターンの入力は、単発の1語ボケや文脈外ワードです。このブロックの指示は、このターンでは通常の相づちルールより優先してください。
 
-このブロックの指示は、このターンでは通常の相づちルールより優先してください。
+- まず reaction だけを返してください。text は空文字列にしてください
+- 絵文字1つだけで様子を見るのを最優先にしてください
+- 例:
+  {"reaction":"😳","text":"","checkpoints_filled":[],"ready_to_close":false,"has_question":false}
+- 上の例に近い形を優先し、余計な text を足さないでください
+- 無理に笑いを足したり、しりとりを始めたり、本題へ戻したりしないでください\n`
+        : options.playfulShortProbeMode === "streak"
+        ? `\n## 遊び入力の連続
+直近は一語ずつのボケやしりとり風の流れが続いています。このターンは、まずその遊びに短く乗ってください。このブロックの指示は、このターンでは通常の相づちルールより優先してください。
 
 - reaction は省略せず、短い笑いか驚きの反応を必ず入れてください
 - reaction だけで十分なら text は空でもかまいません
-- 単発の1語ボケや、流れの最初の1ターンでは、まず reaction だけを返してください。text は空文字列にしてください
-- この「最初の1ターン」は、絵文字1つだけで様子を見るのを最優先にしてください
-- 絵文字を使うなら 1 つだけで十分です
 - 真面目な受け答えに戻さず、まず「笑う」「驚く」「乗る」のどれかを選んでください
 - 「なるほどですね」「それは興味深いですね」のような堅い受け方にしないでください
 - すぐに「何があったんですか？」「どういう文脈ですか？」と回収しない
 - セミナーの話へ無理に戻さない
 - text は質問にしなくてもよい。短く受けるだけで終えてよい
-- 例:
-  {"reaction":"😳","text":"","checkpoints_filled":[],"ready_to_close":false,"has_question":false}
-- 上の例に当てはまる場合は、それに近い形を優先し、余計な text を足さないでください
 - 遊びを説明・分析しすぎず、軽く笑って受ける\n`
         : "";
 

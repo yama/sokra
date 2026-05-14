@@ -78,7 +78,25 @@ function looksLikeShortSingleToken(userText) {
     return normalized.length <= 4;
 }
 
-function parseGeminiResponse(rawText, checkpoints) {
+function countTrailingShortSingleTokenUserTurns(userText) {
+    const userTexts = getSessionLog()
+        .filter(e => e?.role === "user" && typeof e.text === "string")
+        .map(e => e.text.trim());
+    userTexts.push(String(userText || "").trim());
+    let streak = 0;
+    for (let i = userTexts.length - 1; i >= 0; i--) {
+        if (!looksLikeShortSingleToken(userTexts[i])) break;
+        streak += 1;
+    }
+    return streak;
+}
+
+function getPlayfulShortProbeMode(userText) {
+    if (!looksLikeShortSingleToken(userText)) return "off";
+    return countTrailingShortSingleTokenUserTurns(userText) >= 2 ? "streak" : "single";
+}
+
+function parseGeminiResponse(rawText, checkpoints, { allowReactionOnly = true } = {}) {
     const parsed = JSON.parse(String(rawText || "").trim());
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
         throw new Error("response is not a JSON object");
@@ -88,6 +106,9 @@ function parseGeminiResponse(rawText, checkpoints) {
     const readyToClose = parsed.ready_to_close === true;
     if (!text && !reaction) {
         throw new Error("response.text or response.reaction is required");
+    }
+    if (!allowReactionOnly && !text) {
+        throw new Error("response.text is required for this turn");
     }
     if (readyToClose && !text) {
         throw new Error("response.text is required when ready_to_close is true");
@@ -107,7 +128,7 @@ function normalizeReactionEmojiRhythm(turn, userText = "") {
     if (!turn.reaction || !hasEmoji(turn.reaction)) return turn;
     return {
         ...turn,
-        text: stripEmoji(turn.text) || turn.text,
+        text: stripEmoji(turn.text),
     };
 }
 
@@ -132,8 +153,10 @@ async function requestGeminiTurn(userText, context, retryReason = "") {
         lastUserMessage,
         inClosingPhase = false,
         inClosingSummary = false,
-        inClosingImpressionSummary = false
+        inClosingImpressionSummary = false,
+        allowReactionOnly = true
     } = context;
+    const playfulShortProbeMode = getPlayfulShortProbeMode(userText);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), GEMINI_REQUEST_TIMEOUT_MS);
@@ -154,7 +177,7 @@ async function requestGeminiTurn(userText, context, retryReason = "") {
                     inClosingPhase,
                     inClosingSummary,
                     inClosingImpressionSummary,
-                    inPlayfulShortProbeMode: looksLikeShortSingleToken(userText)
+                    playfulShortProbeMode
                 }),
                 conversationHistory: buildConversationHistory(lastUserMessage),
                 userText,
@@ -182,7 +205,11 @@ async function requestGeminiTurn(userText, context, retryReason = "") {
 export async function generateInterviewTurn(userText, context) {
     try {
         return normalizeReactionEmojiRhythm(
-            parseGeminiResponse(await requestGeminiTurn(userText, context), context.checkpoints),
+            parseGeminiResponse(
+                await requestGeminiTurn(userText, context),
+                context.checkpoints,
+                { allowReactionOnly: context.allowReactionOnly !== false }
+            ),
             userText
         );
     } catch (firstError) {
@@ -192,7 +219,8 @@ export async function generateInterviewTurn(userText, context) {
             return normalizeReactionEmojiRhythm(
                 parseGeminiResponse(
                     await requestGeminiTurn(userText, context, firstError.message),
-                    context.checkpoints
+                    context.checkpoints,
+                    { allowReactionOnly: context.allowReactionOnly !== false }
                 ),
                 userText
             );
