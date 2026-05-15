@@ -89,6 +89,13 @@ function normalizeUserText(text) {
     return String(text || "").trim();
 }
 
+function inferHasQuestionFromText(text) {
+    const normalized = String(text || "").trim();
+    if (!normalized) return false;
+    if (/[？?]\s*$/.test(normalized)) return true;
+    return /(ますか|でしょうか|でしたか|ですか|か)\s*$/.test(normalized);
+}
+
 function isSimpleKanaToken(text) {
     return /^[ぁ-ゖァ-ヶー]+$/u.test(text);
 }
@@ -255,7 +262,9 @@ function parseGeminiResponse(rawText, checkpoints, policy) {
         checkpoints_filled: validateCheckpointsFilled(parsed.checkpoints_filled, checkpoints),
         ready_to_close: turn.ready_to_close,
         has_question: turn.text
-            ? (typeof parsed.has_question === "boolean" ? parsed.has_question : true)
+            ? (typeof parsed.has_question === "boolean"
+                ? parsed.has_question
+                : inferHasQuestionFromText(turn.text))
             : false,
     };
 }

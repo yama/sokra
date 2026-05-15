@@ -95,7 +95,7 @@ export class InterviewSession {
     }
 
     _scheduleFollowup(hasQuestion, text) {
-        if (hasQuestion && (text.includes('？') || text.includes('?'))) return;
+        if (hasQuestion) return;
         this._cancelFollowup();
         const token = this._followupToken;
         setTimeout(() => this._sendFollowup(token), FOLLOWUP_DELAY_MS);

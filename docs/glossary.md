@@ -147,7 +147,7 @@ UI上の1個の吹き出し（`.bubble`）。
 ### 自動フォロー
 
 自由会話フェーズでゲストの発言に対するAI応答（`generated_turn`）後、一定時間（`FOLLOWUP_DELAY_MS`）が経過したら自動で追加の問いかけを送る仕組み。
-`has_question: true` かつ本文に疑問符（'？'/'?'）が含まれる場合のみスキップし、それ以外はすべて予約される。
+`has_question: true` の場合はスキップし、それ以外は予約される。
 話題切り替えや自動フォロー自身への応答後には予約されない。
 
 - コード: `_scheduleFollowup()` / `type: "followup_question"`
