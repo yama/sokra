@@ -94,8 +94,8 @@ export class InterviewSession {
         this._followupToken++;
     }
 
-    _scheduleFollowup(hasQuestion, text) {
-        if (hasQuestion && (text.includes('？') || text.includes('?'))) return;
+    _scheduleFollowup(hasQuestion) {
+        if (hasQuestion) return;
         this._cancelFollowup();
         const token = this._followupToken;
         setTimeout(() => this._sendFollowup(token), FOLLOWUP_DELAY_MS);
@@ -370,9 +370,9 @@ export class InterviewSession {
                 });
             } else if (this._phase === PHASES.CHAT) {
                 if (turn.text) {
-                    this._scheduleFollowup(turn.has_question, turn.text);
+                    this._scheduleFollowup(turn.has_question);
                 } else if (shouldScheduleFollowupOnReactionOnly(turn) && !shouldWaitOnReactionOnly(turn)) {
-                    this._scheduleFollowup(false, "");
+                    this._scheduleFollowup(false);
                 }
                 if (this._userTurnCount >= EARLY_CLOSE_TURNS) {
                     showEarlyCloseHint(
