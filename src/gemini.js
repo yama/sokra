@@ -93,7 +93,7 @@ function inferHasQuestionFromText(text) {
     const normalized = String(text || "").trim();
     if (!normalized) return false;
     if (/[？?]\s*$/.test(normalized)) return true;
-    return /(ますか|でしょうか|でしたか|ですか|か)\s*$/.test(normalized);
+    return /(ますか|でしょうか|でしたか|ですか|のですか)\s*$/.test(normalized);
 }
 
 function isSimpleKanaToken(text) {
