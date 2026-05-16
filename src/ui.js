@@ -13,6 +13,9 @@ let closingSummaryCloseBtn = null;
 let closingSummaryPrimaryCloseBtn = null;
 let closingSummaryReturnFocus = null;
 let earlyCloseHintButtons = [];
+let playfulHintButtons = [];
+let earlyCloseHintNode = null;
+let playfulHintNode = null;
 let timeoutActionNode = null;
 
 export function onUserTypingInput() {
@@ -157,8 +160,14 @@ export function setDebugPanelVisible(isVisible) {
 }
 
 export function showEarlyCloseHint(onSwitchTopic, onClose) {
-    const el = document.getElementById("earlyCloseHint");
-    if (!el || el.children.length) return;
+    if (earlyCloseHintNode) return;
+    const msgs = document.getElementById("messages");
+    const row = document.createElement("div");
+    row.className = "msg ai inline-hint-row";
+    const el = document.createElement("div");
+    el.className = "early-close-hint";
+    el.setAttribute("role", "group");
+    el.setAttribute("aria-label", "早期終了ヒント");
     const mkBtn = (label, cb, { hideOnClick = false } = {}) => {
         const btn = document.createElement("button");
         btn.className = "choice-btn";
@@ -175,19 +184,68 @@ export function showEarlyCloseHint(onSwitchTopic, onClose) {
         mkBtn("話題を変えて", onSwitchTopic),
         mkBtn("このくらいで", onClose, { hideOnClick: true })
     );
-    el.style.display = "flex";
+    row.appendChild(el);
+    msgs.appendChild(row);
+    earlyCloseHintNode = row;
+    scrollDown();
 }
 
 export function removeEarlyCloseHint() {
-    const el = document.getElementById("earlyCloseHint");
-    if (!el) return;
-    el.style.display = "none";
-    el.innerHTML = "";
+    if (earlyCloseHintNode) {
+        earlyCloseHintNode.remove();
+        earlyCloseHintNode = null;
+    }
     earlyCloseHintButtons = [];
 }
 
 export function setEarlyCloseHintDisabled(isDisabled) {
     earlyCloseHintButtons.forEach(btn => {
+        btn.disabled = isDisabled;
+    });
+}
+
+export function showPlayfulHint(onAskQuestion, onKeep, onClose) {
+    if (playfulHintNode) return;
+    const msgs = document.getElementById("messages");
+    const row = document.createElement("div");
+    row.className = "msg ai inline-hint-row";
+    const el = document.createElement("div");
+    el.className = "early-close-hint";
+    el.setAttribute("role", "group");
+    el.setAttribute("aria-label", "遊び入力ヒント");
+    const mkBtn = (label, cb, { hideOnClick = true } = {}) => {
+        const btn = document.createElement("button");
+        btn.className = "choice-btn";
+        btn.type = "button";
+        btn.textContent = label;
+        btn.addEventListener("click", () => {
+            if (hideOnClick) removePlayfulHint();
+            Promise.resolve(cb()).catch(() => {});
+        });
+        playfulHintButtons.push(btn);
+        return btn;
+    };
+    el.append(
+        mkBtn("質問して", onAskQuestion),
+        mkBtn("このままで", onKeep),
+        mkBtn("このくらいで", onClose)
+    );
+    row.appendChild(el);
+    msgs.appendChild(row);
+    playfulHintNode = row;
+    scrollDown();
+}
+
+export function removePlayfulHint() {
+    if (playfulHintNode) {
+        playfulHintNode.remove();
+        playfulHintNode = null;
+    }
+    playfulHintButtons = [];
+}
+
+export function setPlayfulHintDisabled(isDisabled) {
+    playfulHintButtons.forEach(btn => {
         btn.disabled = isDisabled;
     });
 }

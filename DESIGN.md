@@ -24,6 +24,9 @@
 - 安心して雑談できる空気を作る
 - ホストが後から読み返せる会話記録を残しやすくする
 
+詳細な聞き手の人格と会話ルールは [会話設計メモ](docs/conversation-design.md) を正本とする。
+この文書では全体方針だけを扱い、細かい返答テクニックは固定しない。
+
 ### 知覚の扱い
 
 - AIは知覚を持っているふりはできる
@@ -237,7 +240,8 @@ AIには必ずJSON形式で返答させる：
 
 ```json
 {
-  "text": "AIの返答テキスト",
+  "reactions": ["AIの短いリアクション"],
+  "question": "必要なときだけ返す問いかけ",
   "checkpoints_filled": ["background", "practical"],
   "ready_to_close": false
 }
@@ -245,6 +249,7 @@ AIには必ずJSON形式で返答させる：
 
 `checkpoints_filled` にはその発言で回収できたチェックポイントのIDを列挙する。空の場合は `[]`。
 `ready_to_close` は会話終了のシグナルとして扱い、最終的な終了判定はアプリ側で行う。
+`question` は不要なら省略し、`ready_to_close: true` のときは出さない。
 自然に拾えなかった論点が残っていても、会話として十分な記録が取れた場合は終了してよい。
 現状は `api/lib/gemini.php` の `call_gemini` が `responseMimeType` は渡すが `responseSchema` は渡しておらず、`app.js` 側が寛容な JSON パースと未知キー無視で吸収する前提にしている。
 
