@@ -166,6 +166,8 @@ export function showEarlyCloseHint(onSwitchTopic, onClose) {
     row.className = "msg ai inline-hint-row";
     const el = document.createElement("div");
     el.className = "early-close-hint";
+    el.setAttribute("role", "group");
+    el.setAttribute("aria-label", "早期終了ヒント");
     const mkBtn = (label, cb, { hideOnClick = false } = {}) => {
         const btn = document.createElement("button");
         btn.className = "choice-btn";
@@ -209,6 +211,8 @@ export function showPlayfulHint(onAskQuestion, onKeep, onClose) {
     row.className = "msg ai inline-hint-row";
     const el = document.createElement("div");
     el.className = "early-close-hint";
+    el.setAttribute("role", "group");
+    el.setAttribute("aria-label", "遊び入力ヒント");
     const mkBtn = (label, cb, { hideOnClick = true } = {}) => {
         const btn = document.createElement("button");
         btn.className = "choice-btn";

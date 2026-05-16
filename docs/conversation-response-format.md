@@ -149,7 +149,7 @@ Sokra の自由会話ターンで AI が返す JSON 応答の契約を定義す�
 `src/gemini.js` では、少なくとも次を検証する。
 
 1. ルートが JSON オブジェクトであること
-2. `reactions` が配列であること
+2. `reactions` は非配列なら `[]` に正規化されること
 3. `question` または `reactions` の少なくとも一方に内容があること
 4. `question` が必須のターンでは `question` があること
 5. `ready_to_close: true` のとき `question` がないこと

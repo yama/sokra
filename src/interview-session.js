@@ -194,14 +194,10 @@ export class InterviewSession {
             if (!this.isActive() || token !== this._followupToken) { removeTyping(); return; }
             this.markCheckpoints(turn.checkpoints_filled);
             await this._speakReactions(turn.reactions);
-            if (turn.question) {
-                await this._speakAndLog(turn.question, {
-                    role: "ai", text: turn.question, type: "followup_question",
-                    answered_checkpoints: turn.checkpoints_filled, ready_to_close: turn.ready_to_close,
-                });
-            } else if (turn.ready_to_close || turn.checkpoints_filled.length > 0) {
-                await this._logTurnWithoutQuestion("followup_question", turn);
-            }
+            await this._speakAndLog(turn.question, {
+                role: "ai", text: turn.question, type: "followup_question",
+                answered_checkpoints: turn.checkpoints_filled, ready_to_close: turn.ready_to_close,
+            });
             if (turn.ready_to_close && this._phase === PHASES.CHAT) {
                 this._beginClosingPhase().catch(e => {
                     pushSessionEvent({ role: "system", type: "closing_phase_error", message: e.message }).catch(() => {});
