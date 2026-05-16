@@ -446,6 +446,7 @@ test.describe("interview runtime", () => {
         await page.getByRole("button", { name: "質問して" }).click();
         await expect(page.locator(".msg.ai:not([aria-hidden]) .bubble").last()).toContainText("印象に残っていること");
         expect(geminiCalls).toHaveLength(3);
+        expect(geminiCalls[2].conversationHistory.some(entry => entry.content.includes("質問して"))).toBe(false);
     });
 
     test("playful keep choice cancels pending followup", async ({ page }) => {
