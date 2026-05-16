@@ -60,6 +60,27 @@ AI が返す JSON 応答の契約は `docs/conversation-response-format.md` を�
 設計上、通常は `question` が進行を担い、`reactions` は受け止めを担う。
 ただし、単発の短い遊び入力では `reactions` のみで返すターンを許容する。
 
+## Gemini 呼び出しの実態
+
+UI 上は 1 本のインタビューセッションとして続いて見えるが、Gemini API とのやり取り自体は stateful な会話セッションを維持していない。
+
+各ターンでは、`src/gemini.js` がその時点の材料を毎回組み立て直して `POST /api/gemini` へ送る。
+具体的には次を都度再構成する。
+
+- その時点の `systemPrompt`
+- 必要な会話履歴 (`conversationHistory`)
+- 今回のユーザー入力 (`userText`)
+
+サーバー側の `api/lib/gemini.php` は、その都度 `contents` を作って Gemini の `generateContent` を呼ぶ。
+したがって実装の実態は「見た目は継続会話、API 呼び出しは毎ターン stateless に再構成」である。
+
+この前提を理解しておくと、次の判断がしやすい。
+
+- どこまでを履歴として渡すか
+- system prompt に何を持たせるか
+- 会話の継続感を prompt と履歴のどちらで支えるか
+- セッション保存と LLM 呼び出しの責務をどう分けるか
+
 ## 会話モード
 
 外部仕様として扱う会話モードは次の 3 つとする。
