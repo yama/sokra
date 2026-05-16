@@ -254,7 +254,7 @@ export class InterviewSession {
                     role: "ai", text: turn.question, type: "topic_switch",
                     answered_checkpoints: turn.checkpoints_filled, ready_to_close: turn.ready_to_close,
                 });
-            } else if (turn.ready_to_close || turn.checkpoints_filled.length > 0) {
+            } else {
                 await this._logTurnWithoutQuestion("topic_switch", turn);
             }
             if (turn.ready_to_close && this._phase === PHASES.CHAT) {

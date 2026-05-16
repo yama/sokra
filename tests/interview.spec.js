@@ -469,6 +469,33 @@ test.describe("interview runtime", () => {
         expect(geminiCalls).toHaveLength(1);
     });
 
+    test("topic switch without question still logs topic_switch", async ({ page }) => {
+        await page.addInitScript(() => {
+            window.__SOKRA_EARLY_CLOSE_TURNS__ = 1;
+        });
+        await mockGemini(page, (_body, callCount) => {
+            if (callCount === 1) {
+                return {
+                    question: "今日のセミナーで印象に残っていることがあれば、そこから聞かせてください。",
+                    checkpoints_filled: [],
+                    ready_to_close: false
+                };
+            }
+            return {
+                reactions: ["わかりました。"],
+                checkpoints_filled: [],
+                ready_to_close: false
+            };
+        });
+        await startInterview(page);
+
+        await sendAndWaitForAiBubble(page, "特にないです");
+        await page.getByRole("button", { name: "話題を変えて" }).click();
+
+        const { events } = await currentSession(page, "topic_switch");
+        expect(events.some(event => event.type === "topic_switch" && !("text" in event))).toBe(true);
+    });
+
     test("single short probe with emoji burst reaction-only schedules a followup", async ({ page }) => {
         await page.addInitScript(() => {
             window.__SOKRA_FOLLOWUP_MS__ = 200;
