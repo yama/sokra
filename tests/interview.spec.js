@@ -6,7 +6,9 @@ async function choose(page, label) {
 
 async function sendMessage(page, text) {
     const input = page.locator("#userInput");
+    await expect(input).toBeVisible();
     await input.fill(text);
+    await expect(page.locator("#sendBtn")).toBeEnabled();
     await page.locator("#sendBtn").click();
 }
 
@@ -93,7 +95,8 @@ async function currentSession(page, requireEvent = null) {
             if (requireEvent && !session.events?.some(e => e.type === requireEvent)) return null;
             return session?.session_id || null;
         }, {
-            message: "session api should return the saved session"
+            message: "session api should return the saved session",
+            timeout: 15000
         })
         .toBe(sessionId);
 
@@ -164,8 +167,11 @@ function defaultGeminiTurn(body) {
     };
 
     return {
-        text: readyToClose
-            ? "ここまで聞かせてもらえれば十分です。今日はこのあたりで終わりにしましょう。"
+        reactions: readyToClose
+            ? ["ここまで聞かせてもらえれば十分です。今日はこのあたりで終わりにしましょう。"]
+            : [],
+        question: readyToClose
+            ? undefined
             : lowEnergy && !backgroundDone
             ? "そうなんですね。無理に広げなくて大丈夫です。参加したきっかけだけ、一言聞いてもいいですか？"
             : nextText[missing] || "ここまで聞かせてもらえれば十分です。今日はこのあたりで終わりにしましょう。",
@@ -230,7 +236,8 @@ test.describe("interview runtime", () => {
 
         expect(geminiCalls).toHaveLength(6); // 3 conversation turns + 1 closing summary + 1 impression summary + 1 closing-phase reply
         expect(geminiCalls[0].responseMimeType).toBe("application/json");
-        expect(geminiCalls[0].systemPrompt).toContain("相づちについて");
+        expect(geminiCalls[0].systemPrompt).toContain("人柄がよく");
+        expect(geminiCalls[0].systemPrompt).toContain("参加者がふざけていてもノリに付き合い");
         expect(geminiCalls[0].systemPrompt).toContain("現在の状態");
         expect(geminiCalls[0].systemPrompt).toContain("論点はノルマではありません");
 
@@ -252,7 +259,7 @@ test.describe("interview runtime", () => {
 
     test("unknown and completed checkpoint ids from Gemini are ignored", async ({ page }) => {
         await mockGemini(page, body => ({
-            text: "うんうん。どんな感じがしました？",
+            question: "うんうん。どんな感じがしました？",
             checkpoints_filled: ["temperature", "unknown", "impression", "impression"],
             ready_to_close: false
         }));
@@ -269,7 +276,7 @@ test.describe("interview runtime", () => {
         await mockGemini(page, async () => {
             await new Promise(resolve => setTimeout(resolve, 300));
             return {
-                text: "うんうん。どんな感じがしました？",
+                question: "うんうん。どんな感じがしました？",
                 checkpoints_filled: ["impression"],
                 ready_to_close: false
             };
@@ -287,7 +294,7 @@ test.describe("interview runtime", () => {
         const geminiCalls = await mockGemini(page, (_body, callCount) => {
             if (callCount === 1) return "これはJSONではありません";
             return {
-                text: "あー、なるほど。印象に残っている話があれば、そこから聞かせてください。",
+                question: "あー、なるほど。印象に残っている話があれば、そこから聞かせてください。",
                 checkpoints_filled: ["background"],
                 ready_to_close: false
             };
@@ -315,19 +322,19 @@ test.describe("interview runtime", () => {
         expect(reply).not.toContain("違和感");
 
         expect(geminiCalls[0].systemPrompt).toContain("difficulty は必ず質問して埋める項目ではありません");
-        expect(geminiCalls[0].systemPrompt).toContain("誘導になります");
+        expect(geminiCalls[0].systemPrompt).toContain("こわさや違和感を前提にした質問をしないでください");
     });
 
     test("emoji burst can be limited to reaction bubble only", async ({ page }) => {
         await mockGemini(page, () => ({
-            reaction: "豚カツ、ですか！😳😳😳",
-            text: "セミナーの内容で、具体的に豚カツを連想させるような話があったんでしょうか？🍚🍚🍚",
+            reactions: ["豚カツ、ですか！😳😳😳"],
+            question: "セミナーの内容で、具体的に豚カツを連想させるような話があったんでしょうか？🍚🍚🍚",
             checkpoints_filled: [],
             ready_to_close: false
         }));
         await startInterview(page);
 
-        const aiBubbles = await sendAndWaitForAiBubbles(page, "豚カツ", 2);
+        const aiBubbles = await sendAndWaitForAiBubbles(page, "豚カツみたいな例えが出てきて面白かったです", 2);
         const bubbleCount = await aiBubbles.count();
         const reaction = await aiBubbles.nth(bubbleCount - 2).innerText();
         const followup = await aiBubbles.nth(bubbleCount - 1).innerText();
@@ -337,13 +344,12 @@ test.describe("interview runtime", () => {
         expect(followup).not.toContain("😳😳😳");
     });
 
-    test("single short probe waits on single-emoji reaction-only, then short-probe streak can continue with text", async ({ page }) => {
+    test("single short probe waits on single-emoji reaction-only, then short-probe streak can continue with reactions only", async ({ page }) => {
         await page.addInitScript(() => {
             window.__SOKRA_FOLLOWUP_MS__ = 200;
         });
         const geminiCalls = await mockGemini(page, (_body, callCount) => ({
-            reaction: callCount === 1 ? "😳" : "あはは！",
-            text: callCount === 1 ? "" : "なんだか面白くなってきましたね。",
+            reactions: callCount === 1 ? ["😳"] : ["あはは！", "なんだか面白くなってきましたね。"],
             checkpoints_filled: [],
             ready_to_close: false
         }));
@@ -368,15 +374,15 @@ test.describe("interview runtime", () => {
         const afterSecond = await aiBubbles.count();
         expect(afterSecond).toBeGreaterThanOrEqual(beforeSecond + 2);
         const reaction = await aiBubbles.nth(afterSecond - 2).innerText();
-        const text = await aiBubbles.nth(afterSecond - 1).innerText();
+        const secondReaction = await aiBubbles.nth(afterSecond - 1).innerText();
         expect(reaction).toBe("あはは！");
-        expect(text).toContain("なんだか面白くなってきましたね");
+        expect(secondReaction).toContain("なんだか面白くなってきましたね");
 
         session = await currentSession(page);
-        expect(session.events.filter(event => event.type === "generated_turn")).toHaveLength(1);
-        expect(session.events.filter(event => event.type === "reaction")).toHaveLength(2);
-        expect(geminiCalls[1].systemPrompt).toContain("短語の遊び入力が連続している");
-        expect(geminiCalls[1].systemPrompt).toContain("堅い受け方にしない");
+        expect(session.events.filter(event => event.type === "generated_turn")).toHaveLength(0);
+        expect(session.events.filter(event => event.type === "reaction")).toHaveLength(3);
+        expect(geminiCalls[1].systemPrompt).toContain("会話モード: playful");
+        expect(geminiCalls[1].systemPrompt).toContain("どうにか質問しようとせず、まず相手に合わせてください");
     });
 
     test("simple kana run can start with a single reaction-only probe", async ({ page }) => {
@@ -384,8 +390,7 @@ test.describe("interview runtime", () => {
             window.__SOKRA_FOLLOWUP_MS__ = 200;
         });
         const geminiCalls = await mockGemini(page, () => ({
-            reaction: "😳",
-            text: "",
+            reactions: ["😳"],
             checkpoints_filled: [],
             ready_to_close: false
         }));
@@ -404,7 +409,43 @@ test.describe("interview runtime", () => {
             .toBe(beforeWait);
         const session = await currentSession(page);
         expect(session.events.some(event => event.type === "followup_question")).toBe(false);
-        expect(geminiCalls[0].systemPrompt).toContain("単発の遊び入力");
+        expect(geminiCalls[0].systemPrompt).toContain("単発の文脈外入力");
+    });
+
+    test("playful no-question turn shows choice buttons and can request a normal followup", async ({ page }) => {
+        const geminiCalls = await mockGemini(page, (_body, callCount) => {
+            if (callCount === 1) {
+                return {
+                    reactions: ["🍎"],
+                    checkpoints_filled: [],
+                    ready_to_close: false
+                };
+            }
+            if (callCount === 2) {
+                return {
+                    reactions: ["らっぱ"],
+                    checkpoints_filled: [],
+                    ready_to_close: false
+                };
+            }
+            return {
+                question: "今日のセミナーで印象に残っていることがあれば、そこから聞かせてください。",
+                checkpoints_filled: [],
+                ready_to_close: false
+            };
+        });
+        await startInterview(page);
+
+        await sendAndWaitForAiBubble(page, "りんご");
+        await sendAndWaitForAiBubble(page, "ごりら");
+
+        await expect(page.getByRole("button", { name: "質問して" })).toBeVisible();
+        await expect(page.getByRole("button", { name: "このままで" })).toBeVisible();
+        await expect(page.getByRole("button", { name: "このくらいで" })).toBeVisible();
+
+        await page.getByRole("button", { name: "質問して" }).click();
+        await expect(page.locator(".msg.ai:not([aria-hidden]) .bubble").last()).toContainText("印象に残っていること");
+        expect(geminiCalls).toHaveLength(3);
     });
 
     test("single short probe with emoji burst reaction-only schedules a followup", async ({ page }) => {
@@ -414,14 +455,13 @@ test.describe("interview runtime", () => {
         const geminiCalls = await mockGemini(page, (_body, callCount) => {
             if (callCount === 1) {
                 return {
-                    reaction: "😳😳😳",
-                    text: "",
+                    reactions: ["😳😳😳"],
                     checkpoints_filled: [],
                     ready_to_close: false
                 };
             }
             return {
-                text: "その一言、ちょっと気になります。もう少しだけ聞かせてもらえますか？",
+                question: "その一言、ちょっと気になります。もう少しだけ聞かせてもらえますか？",
                 checkpoints_filled: [],
                 ready_to_close: false
             };
@@ -443,33 +483,22 @@ test.describe("interview runtime", () => {
         expect(geminiCalls).toHaveLength(2);
     });
 
-    test("reaction-only is rejected for short-probe streak and retried with text", async ({ page }) => {
-        await page.addInitScript(() => {
-            window.__SOKRA_FOLLOWUP_MS__ = 200;
-        });
+    test("short-probe streak accepts reactions-only without retry", async ({ page }) => {
         const geminiCalls = await mockGemini(page, (_body, callCount) => {
             if (callCount === 1) {
                 return {
-                    reaction: "😳",
-                    text: "",
+                    reactions: ["😳"],
                     checkpoints_filled: [],
                     ready_to_close: false
                 };
             }
             if (callCount === 2) {
                 return {
-                    reaction: "🦍！",
-                    text: "",
+                    reactions: ["🦍！", "なんだか面白くなってきましたね。"],
                     checkpoints_filled: [],
                     ready_to_close: false
                 };
             }
-            return {
-                reaction: "あはは！",
-                text: "なんだか面白くなってきましたね。",
-                checkpoints_filled: [],
-                ready_to_close: false
-            };
         });
         await startInterview(page);
 
@@ -480,13 +509,13 @@ test.describe("interview runtime", () => {
         await sendAndWaitForAiBubbles(page, "ぱんだ", 2);
         const afterSecond = await aiBubbles.count();
         expect(afterSecond).toBeGreaterThanOrEqual(beforeSecond + 2);
-        expect(await aiBubbles.nth(afterSecond - 2).innerText()).toBe("あはは！");
+        expect(await aiBubbles.nth(afterSecond - 2).innerText()).toBe("🦍！");
         expect(await aiBubbles.nth(afterSecond - 1).innerText()).toContain("なんだか面白くなってきましたね");
 
-        const { usageText, events } = await currentSession(page, "followup_question");
-        expect(usageText).toContain("再試行: 1回");
-        expect(events.some(event => event.type === "ai_turn_retry")).toBe(true);
-        expect(geminiCalls).toHaveLength(4);
+        const { usageText, events } = await currentSession(page);
+        expect(usageText).toContain("再試行: 0回");
+        expect(events.some(event => event.type === "ai_turn_retry")).toBe(false);
+        expect(geminiCalls).toHaveLength(2);
     });
 
     test("internal followup retries when reaction-only is returned", async ({ page }) => {
@@ -496,22 +525,20 @@ test.describe("interview runtime", () => {
         const geminiCalls = await mockGemini(page, (_body, callCount) => {
             if (callCount === 1) {
                 return {
-                    reaction: "😳😳😳",
-                    text: "",
+                    reactions: ["😳😳😳"],
                     checkpoints_filled: [],
                     ready_to_close: false
                 };
             }
             if (callCount === 2) {
                 return {
-                    reaction: "あはは！",
-                    text: "",
+                    reactions: ["あはは！"],
                     checkpoints_filled: [],
                     ready_to_close: false
                 };
             }
             return {
-                text: "前の言葉をそのまま広げなくて大丈夫です。印象に残ったことがあれば、そこから聞かせてください。",
+                question: "前の言葉をそのまま広げなくて大丈夫です。印象に残ったことがあれば、そこから聞かせてください。",
                 checkpoints_filled: [],
                 ready_to_close: false
             };
@@ -540,7 +567,7 @@ test.describe("interview runtime", () => {
             window.__SOKRA_ABANDON_MS__ = 1000;
         });
         await mockGemini(page, () => ({
-            text: "うんうん、なるほど。どんなところが印象に残りましたか？",
+            question: "うんうん、なるほど。どんなところが印象に残りましたか？",
             checkpoints_filled: [],
             ready_to_close: false
         }));
@@ -556,17 +583,28 @@ test.describe("interview runtime", () => {
 
     test("abandon timer in closing phase records a closing timeout without restart action", async ({ page }) => {
         await page.addInitScript(() => {
-            window.__SOKRA_ABANDON_MS__ = 1200;
+            window.__SOKRA_ABANDON_MS__ = 2500;
         });
-        await mockGemini(page);
+        await mockGemini(page, body => {
+            if (body.requestKind === "closing_summary") {
+                return {
+                    text: "ここで終わりにして大丈夫です。ありがとうございました。",
+                    checkpoints_filled: [],
+                    ready_to_close: false
+                };
+            }
+            return {
+                reactions: ["今日はこのあたりで大丈夫そうです。"],
+                checkpoints_filled: ["impression"],
+                ready_to_close: true
+            };
+        });
         await startInterview(page);
 
-        await sendAndReadReply(page, "文章を自動で整えるデモの話が印象的でした");
-        await sendAndReadReply(page, "社内の問い合わせ対応みたいな場面では使えるかもと思いました");
         await sendAndReadReply(page, "社内で案内があったので来ました");
         await expect(page.locator(".closing-action")).toBeVisible();
 
-        await expect(page.locator("#endedNote")).toContainText("終了として記録しました", { timeout: 5000 });
+        await expect(page.locator("#endedNote")).toContainText("終了として記録しました", { timeout: 8000 });
         await expect(page.getByRole("button", { name: "もう一度はじめる" })).toHaveCount(0);
         await expect(page.getByRole("button", { name: "今回は終了" })).toHaveCount(0);
         const { events } = await currentSession(page, "session_timeout_closing");
@@ -586,7 +624,7 @@ test.describe("interview runtime", () => {
                 contentType: "application/json",
                 body: JSON.stringify({
                     text: JSON.stringify({
-                        text: "遅すぎる返答です",
+                        question: "遅すぎる返答ですか？",
                         checkpoints_filled: [],
                         ready_to_close: false
                     }),
@@ -632,16 +670,23 @@ test.describe("interview runtime", () => {
     });
 
     test("meta complaint is sent to Gemini and can trigger closing", async ({ page }) => {
-        const geminiCalls = await mockGemini(page, (_body, callCount) => {
+        const geminiCalls = await mockGemini(page, (body, callCount) => {
+            if (body.requestKind === "closing_summary") {
+                return {
+                    text: "ゆっくりどうぞ。終わりにするときは下のボタンで終了できます。ありがとうございました。",
+                    checkpoints_filled: [],
+                    ready_to_close: false
+                };
+            }
             if (callCount === 1) {
                 return {
-                    text: "仕事や普段の場面にもつながりそうですか？",
+                    question: "仕事や普段の場面にもつながりそうですか？",
                     checkpoints_filled: ["impression"],
                     ready_to_close: false
                 };
             }
             return {
-                text: "噛み合っていない感じになってしまいましたね。ここでいったん止めます。",
+                reactions: ["噛み合っていない感じになってしまいましたね。ここでいったん止めます。"],
                 checkpoints_filled: [],
                 ready_to_close: true
             };
@@ -655,7 +700,7 @@ test.describe("interview runtime", () => {
         expect(reply).toContain("噛み合っていない");
         await expect(page.locator(".closing-action")).toBeVisible();
         expect(geminiCalls).toHaveLength(3); // 2 conversation turns + 1 closing summary
-        expect(geminiCalls[1].systemPrompt).toContain("クロージングの流れ");
+        expect(geminiCalls[1].systemPrompt).toContain("## クロージング");
 
         const { events } = await currentSession(page);
         const lastGeneratedTurn = [...events].reverse().find(event => event.role === "ai" && event.type === "generated_turn");

@@ -75,8 +75,6 @@ $ogImageUrl = asset_url('/assets/images/ogp/default.png');
              aria-label="会話"
              tabindex="-1"></div>
 
-        <div id="earlyCloseHint" class="early-close-hint"></div>
-
         <div class="input-area"
              id="inputArea">
             <textarea id="userInput"

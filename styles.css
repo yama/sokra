@@ -309,11 +309,14 @@ body {
 }
 
 .early-close-hint {
-    display: none;
+    display: flex;
     justify-content: flex-end;
     gap: 8px;
-    padding: 6px 16px 8px;
-    flex-shrink: 0;
+    width: 100%;
+}
+
+.inline-hint-row {
+    margin-top: -2px;
 }
 
 .input-area {
