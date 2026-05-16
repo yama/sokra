@@ -470,6 +470,44 @@ test.describe("interview runtime", () => {
         expect(geminiCalls).toHaveLength(1);
     });
 
+    test("closing during pending followup does not leave composer disabled", async ({ page }) => {
+        await page.addInitScript(() => {
+            window.__SOKRA_FOLLOWUP_MS__ = 50;
+            window.__SOKRA_EARLY_CLOSE_TURNS__ = 1;
+        });
+        await mockGemini(page, async (body, callCount) => {
+            if (body.requestKind === "closing_summary") {
+                return {
+                    text: "ここで終わりにして大丈夫です。ありがとうございました。",
+                    checkpoints_filled: [],
+                    ready_to_close: false
+                };
+            }
+            if (callCount === 1) {
+                return {
+                    reactions: ["😳😳😳"],
+                    checkpoints_filled: [],
+                    ready_to_close: false
+                };
+            }
+            await new Promise(resolve => setTimeout(resolve, 500));
+            return {
+                question: "その一言、もう少しだけ聞かせてもらえますか？",
+                checkpoints_filled: [],
+                ready_to_close: false
+            };
+        });
+        await startInterview(page);
+
+        await sendAndWaitForAiBubble(page, "りんご");
+        await expect(page.getByRole("button", { name: "このくらいで" })).toBeVisible();
+        await page.waitForTimeout(120);
+        await page.getByRole("button", { name: "このくらいで" }).click();
+
+        await expect(page.locator(".closing-action")).toBeVisible({ timeout: 10000 });
+        await expect(page.locator("#sendBtn")).toBeEnabled();
+    });
+
     test("topic switch without question still logs topic_switch", async ({ page }) => {
         await page.addInitScript(() => {
             window.__SOKRA_EARLY_CLOSE_TURNS__ = 1;

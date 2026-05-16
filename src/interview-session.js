@@ -206,12 +206,9 @@ export class InterviewSession {
         } catch (e) {
             pushSessionEvent({ role: "system", type: "followup_error", message: e.message }).catch(() => {});
         } finally {
-            // token が変わっていれば別の処理が _isBusy を引き継いでいる
-            if (token === this._followupToken) {
-                this._isBusy = false;
-                document.getElementById("sendBtn").disabled = false;
-                setPlayfulHintDisabled(false);
-            }
+            this._isBusy = false;
+            document.getElementById("sendBtn").disabled = false;
+            setPlayfulHintDisabled(false);
         }
     }
 
