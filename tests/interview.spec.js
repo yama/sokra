@@ -448,6 +448,27 @@ test.describe("interview runtime", () => {
         expect(geminiCalls).toHaveLength(3);
     });
 
+    test("playful keep choice cancels pending followup", async ({ page }) => {
+        await page.addInitScript(() => {
+            window.__SOKRA_FOLLOWUP_MS__ = 200;
+        });
+        const geminiCalls = await mockGemini(page, () => ({
+            reactions: ["🍎"],
+            checkpoints_filled: [],
+            ready_to_close: false
+        }));
+        await startInterview(page);
+
+        await sendAndWaitForAiBubble(page, "りんご");
+        await expect(page.getByRole("button", { name: "このままで" })).toBeVisible();
+        await page.getByRole("button", { name: "このままで" }).click();
+        await page.waitForTimeout(800);
+
+        const { events } = await currentSession(page);
+        expect(events.some(event => event.type === "followup_question")).toBe(false);
+        expect(geminiCalls).toHaveLength(1);
+    });
+
     test("single short probe with emoji burst reaction-only schedules a followup", async ({ page }) => {
         await page.addInitScript(() => {
             window.__SOKRA_FOLLOWUP_MS__ = 200;
@@ -469,6 +490,7 @@ test.describe("interview runtime", () => {
         await startInterview(page);
 
         await sendAndWaitForAiBubble(page, "りんご");
+        await expect(page.getByRole("button", { name: "質問して" })).toHaveCount(0);
         const aiBubbles = page.locator(".msg.ai:not([aria-hidden]) .bubble");
         const beforeFollowupCount = await aiBubbles.count();
         await expect

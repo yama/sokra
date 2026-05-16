@@ -107,6 +107,7 @@ export class InterviewSession {
         showPlayfulHint(
             () => this._requestPlayfulFollowup(),
             () => {
+                this._cancelFollowup();
                 this._resetAbandonTimer();
             },
             () => this._beginClosingPhase().catch(e => {
@@ -175,6 +176,7 @@ export class InterviewSession {
         const input = document.getElementById("userInput");
         if (input?.value.trim()) return;
         this._isBusy = true;
+        removePlayfulHint();
         document.getElementById("sendBtn").disabled = true;
         setPlayfulHintDisabled(true);
         try {
@@ -452,10 +454,17 @@ export class InterviewSession {
                     pushSessionEvent({ role: "system", type: "closing_phase_error", message: e.message }).catch(() => {});
                 });
             } else if (this._phase === PHASES.CHAT) {
-                if (!turn.question && (turn.turn_policy?.mode === "playful" || turn.turn_policy?.mode === "shiritori")) {
+                const schedulesReactionOnlyFollowup = !turn.question
+                    && shouldScheduleFollowupOnReactionOnly(turn)
+                    && !shouldWaitOnReactionOnly(turn);
+                if (
+                    !turn.question
+                    && !schedulesReactionOnlyFollowup
+                    && (turn.turn_policy?.mode === "playful" || turn.turn_policy?.mode === "shiritori")
+                ) {
                     this._showPlayfulHint();
                 }
-                if (!turn.question && shouldScheduleFollowupOnReactionOnly(turn) && !shouldWaitOnReactionOnly(turn)) {
+                if (schedulesReactionOnlyFollowup) {
                     this._scheduleFollowup(false);
                 }
                 if (this._userTurnCount >= EARLY_CLOSE_TURNS) {
